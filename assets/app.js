@@ -5,7 +5,7 @@
 jQuery(function ($) {
     'use strict';
     // Log inicial para verificar si los parámetros de PHP están disponibles
-    console.log('DEBUG: posStreamingParams:', typeof posStreamingParams !== 'undefined' ? posStreamingParams : '¡NO DEFINIDO!');
+    console.log('DEBUG: posBaseParams:', typeof posBaseParams !== 'undefined' ? posBaseParams : '¡NO DEFINIDO!');
 
     // --- Cache de Selectores DOM ---
     // Pestañas (Tabs) <-- NUEVO
@@ -138,10 +138,21 @@ jQuery(function ($) {
             // DataTables puede necesitar reajustar las columnas si estaba oculto
             console.log('Ajustando columnas de DataTables...');
             setTimeout(() => {
+                // Asegurarse de que la instancia todavía existe
                 if (salesDataTable && typeof salesDataTable.columns === 'function') {
-                    salesDataTable.columns.adjust().responsive.recalc();
+                    // 1. Ajustar las columnas primero
+                    salesDataTable.columns.adjust();
+
+                    // 2. Luego, recalcular la responsividad (si la extensión está activa)
+                    // Comprobar si la extensión Responsive está disponible antes de llamarla
+                    if (typeof salesDataTable.responsive === 'object' && typeof salesDataTable.responsive.recalc === 'function') {
+                        salesDataTable.responsive.recalc();
+                    } else {
+                        // Opcional: Advertir si la extensión no está cargada/activa
+                        console.warn('DataTables Responsive extension no parece estar activa.');
+                    }
                 }
-            }, 50);
+            }, 50); // El timeout sigue siendo buena idea
         }
     }
 
@@ -152,8 +163,8 @@ jQuery(function ($) {
     }
 
     async function fetchProducts(searchTerm = '', page = 1, featuredOnly = false) {
-        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
-            console.error('Error Crítico: posStreamingParams no está definido o incompleto.');
+        if (typeof posBaseParams === 'undefined' || !posBaseParams.rest_url || !posBaseParams.nonce) {
+            console.error('Error Crítico: posBaseParams no está definido o incompleto.');
             showMessage(productListContainer, 'Error de configuración. Contacta al administrador.', 'error');
             return;
         }
@@ -162,20 +173,20 @@ jQuery(function ($) {
         currentSearchTerm = searchTerm;
         isCurrentlyFeatured = featuredOnly && !searchTerm;
         currentPage = page;
-        showMessage(productListContainer, posStreamingParams.i18n?.loading || 'Cargando...', 'loading');
+        showMessage(productListContainer, posBaseParams.i18n?.loading || 'Cargando...', 'loading');
         const params = new URLSearchParams({ page: page, per_page: PRODUCTS_PER_PAGE });
         if (searchTerm) params.append('search', searchTerm);
         if (featuredOnly && !searchTerm) params.append('featured', 'true');
-        const apiUrl = `${posStreamingParams.rest_url}products?${params.toString()}`;
+        const apiUrl = `${posBaseParams.rest_url}products?${params.toString()}`;
         console.log('API Call (Products):', apiUrl);
         try {
             const response = await fetch(apiUrl, {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': posStreamingParams.nonce }
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': posBaseParams.nonce }
             });
             let responseBodyText = await response.text();
             if (!response.ok) {
-                let errorMsg = posStreamingParams.i18n?.error_general || 'Ocurrió un error inesperado.';
+                let errorMsg = posBaseParams.i18n?.error_general || 'Ocurrió un error inesperado.';
                 try { const errorData = JSON.parse(responseBodyText); errorMsg = errorData.message || errorMsg; } catch (e) { console.error("Respuesta no JSON:", responseBodyText); }
                 throw new Error(`${errorMsg} (Status: ${response.status})`);
             }
@@ -183,7 +194,7 @@ jQuery(function ($) {
             renderProducts(products);
         } catch (error) {
             console.error('Error en fetchProducts:', error);
-            showMessage(productListContainer, `${posStreamingParams.i18n?.error_general || 'Error'}: ${error.message}`, 'error');
+            showMessage(productListContainer, `${posBaseParams.i18n?.error_general || 'Error'}: ${error.message}`, 'error');
         } finally {
             isLoadingProducts = false;
         }
@@ -192,7 +203,7 @@ jQuery(function ($) {
     function renderProducts(products) {
         productListContainer.empty();
         if (!Array.isArray(products)) { console.error("API response not array:", products); showMessage(productListContainer, 'Respuesta inesperada.', 'error'); return; }
-        if (products.length === 0) { const msg = isCurrentlyFeatured ? (posStreamingParams.i18n?.no_featured_products_found || 'No hay destacados.') : (posStreamingParams.i18n?.no_products_found || 'No se encontraron.'); showMessage(productListContainer, msg, 'info'); return; }
+        if (products.length === 0) { const msg = isCurrentlyFeatured ? (posBaseParams.i18n?.no_featured_products_found || 'No hay destacados.') : (posBaseParams.i18n?.no_products_found || 'No se encontraron.'); showMessage(productListContainer, msg, 'info'); return; }
         const listTitle = isCurrentlyFeatured ? 'Productos Destacados' : (currentSearchTerm ? `Resultados para "${currentSearchTerm}"` : 'Todos');
         productListContainer.append(`<h3 class="pos-product-list-title">${listTitle}</h3>`);
         products.forEach((product, index) => {
@@ -208,17 +219,17 @@ jQuery(function ($) {
                     if (!variation || typeof variation !== 'object' || !variation.variation_id) { console.warn(`[${index}] Variación inválida:`, variation); return; }
                     const variationId = variation.variation_id;
                     const isVariationInStock = variation.stock_status === 'instock';
-                    const stockText = isVariationInStock ? (variation.stock_quantity !== null ? `Stock: ${variation.stock_quantity}` : (posStreamingParams.i18n?.instock || 'En stock')) : (posStreamingParams.i18n?.outofstock || 'Agotado');
+                    const stockText = isVariationInStock ? (variation.stock_quantity !== null ? `Stock: ${variation.stock_quantity}` : (posBaseParams.i18n?.instock || 'En stock')) : (posBaseParams.i18n?.outofstock || 'Agotado');
                     const priceText = variation.price_html || (typeof variation.price === 'number' ? variation.price.toFixed(2) : 'N/A');
-                    variationsHtml += `<li class="product-variation-item ${isVariationInStock ? 'instock' : 'outofstock'}" data-variation-id="${variationId}"><span class="variation-details"><span class="variation-name">${variation.variation_name || 'Variación'}</span> ${variation.sku ? `<span class="variation-sku">(SKU: ${variation.sku})</span>` : ''} - <span class="variation-price">${priceText}</span></span><span class="variation-stock-status">${stockText}</span><span class="variation-actions"><button type="button" class="button button-small add-variation-to-cart" data-product-id="${product.id}" data-variation-id="${variationId}" ${!isVariationInStock ? 'disabled' : ''} title="Añadir ${variation.variation_name || 'Variación'}">${posStreamingParams.i18n?.add_to_cart || 'Añadir'}</button></span></li>`;
+                    variationsHtml += `<li class="product-variation-item ${isVariationInStock ? 'instock' : 'outofstock'}" data-variation-id="${variationId}"><span class="variation-details"><span class="variation-name">${variation.variation_name || 'Variación'}</span> ${variation.sku ? `<span class="variation-sku">(SKU: ${variation.sku})</span>` : ''} - <span class="variation-price">${priceText}</span></span><span class="variation-stock-status">${stockText}</span><span class="variation-actions"><button type="button" class="button button-small add-variation-to-cart" data-product-id="${product.id}" data-variation-id="${variationId}" ${!isVariationInStock ? 'disabled' : ''} title="Añadir ${variation.variation_name || 'Variación'}">${posBaseParams.i18n?.add_to_cart || 'Añadir'}</button></span></li>`;
                 });
                 variationsHtml += '</ul>';
             }
             let actionHtml = '';
-            if (isSimple) { actionHtml = `<button type="button" class="button button-primary add-simple-to-cart" data-product-id="${product.id}" ${!isSimpleInStock ? 'disabled' : ''} title="Añadir ${product.name || 'producto'}">${posStreamingParams.i18n?.add_to_cart || 'Añadir'}</button>`; }
-            else if (isVariable) { actionHtml = `<span class="select-variation-label">${posStreamingParams.i18n?.select_variation || 'Selecciona opción:'}</span>`; }
+            if (isSimple) { actionHtml = `<button type="button" class="button button-primary add-simple-to-cart" data-product-id="${product.id}" ${!isSimpleInStock ? 'disabled' : ''} title="Añadir ${product.name || 'producto'}">${posBaseParams.i18n?.add_to_cart || 'Añadir'}</button>`; }
+            else if (isVariable) { actionHtml = `<span class="select-variation-label">${posBaseParams.i18n?.select_variation || 'Selecciona opción:'}</span>`; }
             const simplePriceText = product.price_html || (typeof product.price === 'number' ? product.price.toFixed(2) : 'N/A');
-            const simpleStockText = isSimpleInStock ? (posStreamingParams.i18n?.instock || 'En stock') : (posStreamingParams.i18n?.outofstock || 'Agotado');
+            const simpleStockText = isSimpleInStock ? (posBaseParams.i18n?.instock || 'En stock') : (posBaseParams.i18n?.outofstock || 'Agotado');
             const productItem = $(`<div class="pos-product-item ${isVariable ? 'product-type-variable' : (isSimple ? 'product-type-simple' : 'product-type-other')} ${!isVariable && !isSimpleInStock ? 'product-outofstock' : ''}" data-product-id="${product.id}"><div class="product-main-info"><img src="${product.image_url || ''}" alt="${product.name || ''}" class="pos-product-thumbnail"><div class="product-details"><strong class="product-name">${product.name || 'Sin nombre'}</strong><div class="product-meta">${product.sku ? `<span class="product-sku">SKU: ${product.sku}</span>` : ''} ${isSimple ? `<span class="product-price">Precio: ${simplePriceText}</span>` : ''} ${isSimple ? `<span class="product-stock-status stock-${simpleStockStatus}">${simpleStockText}</span>` : ''}</div></div><div class="product-actions">${actionHtml}</div></div>${variationsHtml}</div>`);
             productItem.data('productData', product);
             productListContainer.append(productItem);
@@ -274,7 +285,7 @@ jQuery(function ($) {
     function updateCartUI() {
         cartItemsContainer.empty();
         if (cart.length === 0) {
-            cartItemsContainer.html(`<li class="empty-cart">${posStreamingParams.i18n?.cart_empty || 'El carrito está vacío.'}</li>`);
+            cartItemsContainer.html(`<li class="empty-cart">${posBaseParams.i18n?.cart_empty || 'El carrito está vacío.'}</li>`);
         } else {
             cart.forEach(item => {
                 const itemSubtotal = (item.current_price * item.quantity).toFixed(2);
@@ -350,20 +361,20 @@ jQuery(function ($) {
     }
 
     function validateCouponAPI(couponCode) {
-        const url = `${posStreamingParams.rest_url}coupons/validate`;
+        const url = `${posBaseParams.rest_url}coupons/validate`;
         console.log(`API Call (Validate Coupon): POST ${url}`);
         isLoadingCouponAction = true;
-        $applyCouponButton.prop('disabled', true).text(posStreamingParams.i18n?.validating || 'Validando...');
+        $applyCouponButton.prop('disabled', true).text(posBaseParams.i18n?.validating || 'Validando...');
 
         return $.ajax({
             url: url,
             method: 'POST',
-            beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce),
+            beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce),
             contentType: 'application/json',
             data: JSON.stringify({ code: couponCode })
         }).always(() => {
             isLoadingCouponAction = false;
-            $applyCouponButton.prop('disabled', false).text(posStreamingParams.i18n?.apply || 'Aplicar');
+            $applyCouponButton.prop('disabled', false).text(posBaseParams.i18n?.apply || 'Aplicar');
         });
     }
 
@@ -372,7 +383,7 @@ jQuery(function ($) {
 
         const couponCode = $couponCodeInput.val().trim();
         if (!couponCode) {
-            showCouponMessage(posStreamingParams.i18n?.coupon_code_required || 'Ingresa un código de cupón.', true);
+            showCouponMessage(posBaseParams.i18n?.coupon_code_required || 'Ingresa un código de cupón.', true);
             $couponCodeInput.focus();
             return;
         }
@@ -385,10 +396,10 @@ jQuery(function ($) {
             .done(response => {
                 console.log('Cupón válido:', response);
                 appliedCoupon = response;
-                const successMsg = posStreamingParams.i18n?.coupon_applied_success || 'Cupón "%s" aplicado.';
+                const successMsg = posBaseParams.i18n?.coupon_applied_success || 'Cupón "%s" aplicado.';
                 showCouponMessage(
                     `<span>${successMsg.replace('%s', `<strong>${response.code}</strong>`)}</span>
-                     <button type="button" class="button-link pos-remove-coupon-button" title="${posStreamingParams.i18n?.remove_coupon || 'Quitar cupón'}">&times;</button>`,
+                     <button type="button" class="button-link pos-remove-coupon-button" title="${posBaseParams.i18n?.remove_coupon || 'Quitar cupón'}">&times;</button>`,
                     false
                 );
                 $couponCodeInput.prop('disabled', true);
@@ -397,7 +408,7 @@ jQuery(function ($) {
             })
             .fail(error => {
                 console.error('Error validando cupón:', error);
-                const errorMsg = error?.responseJSON?.message || posStreamingParams.i18n?.coupon_invalid || 'Cupón inválido.';
+                const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.coupon_invalid || 'Cupón inválido.';
                 showCouponMessage(errorMsg, true);
                 appliedCoupon = null;
                 calculateTotals();
@@ -488,7 +499,7 @@ jQuery(function ($) {
     }
 
     // --- Funciones de Cliente ---
-    function showLoading(message = posStreamingParams.i18n?.loading || 'Cargando...') {
+    function showLoading(message = posBaseParams.i18n?.loading || 'Cargando...') {
         if (typeof Swal !== 'undefined') {
             Swal.fire({ title: message, allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         } else { console.log(message); }
@@ -503,7 +514,7 @@ jQuery(function ($) {
         const phoneInput = $customerPhoneInput[0];
         if (phoneInput && typeof intlTelInput !== 'undefined') {
             iti = intlTelInput(phoneInput, {
-                utilsScript: posStreamingParams.intlTelInputUtilsScript, initialCountry: "auto",
+                utilsScript: posBaseParams.intlTelInputUtilsScript, initialCountry: "auto",
                 geoIpLookup: callback => { callback("pe"); }, separateDialCode: true, nationalMode: false,
             });
             console.log('intl-tel-input initialized');
@@ -511,13 +522,13 @@ jQuery(function ($) {
     }
 
     function resetCustomerForm() {
-        $customerFormTitle.text(posStreamingParams.i18n?.add_customer || 'Nuevo Cliente');
+        $customerFormTitle.text(posBaseParams.i18n?.add_customer || 'Nuevo Cliente');
         $customerIdInput.val('');
         $customerFirstNameInput.val(''); $customerLastNameInput.val('');
         $customerEmailInput.val(''); $customerPhoneInput.val('');
         $customerAvatarIdInput.val('');
         $customerNoteInput.val(''); // <-- AÑADIR ESTA LÍNEA
-        $customerAvatarPreview.attr('src', posStreamingParams.default_avatar_url || '');
+        $customerAvatarPreview.attr('src', posBaseParams.default_avatar_url || '');
         $removeAvatarBtn.hide();
         $customerFormFeedback.hide().removeClass('notice-success notice-error').text('');
         if (iti) { try { iti.setNumber(''); } catch(e) { console.warn("Error resetting iti number:", e); } }
@@ -526,7 +537,7 @@ jQuery(function ($) {
 
     function populateCustomerForm(customerData) {
         resetCustomerForm();
-        $customerFormTitle.text(posStreamingParams.i18n?.edit_customer || 'Editar Cliente');
+        $customerFormTitle.text(posBaseParams.i18n?.edit_customer || 'Editar Cliente');
         $customerIdInput.val(customerData.id);
         $customerFirstNameInput.val(customerData.first_name || '');
         $customerLastNameInput.val(customerData.last_name || '');
@@ -538,8 +549,8 @@ jQuery(function ($) {
         }
         $customerNoteInput.val(customerData.note || ''); // <-- AÑADIR ESTA LÍNEA
         $customerAvatarIdInput.val(customerData.avatar_id || '');
-        $customerAvatarPreview.attr('src', customerData.avatar_url || posStreamingParams.default_avatar_url || '');
-        if (customerData.avatar_id && customerData.avatar_url !== posStreamingParams.default_avatar_url) { $removeAvatarBtn.show(); }
+        $customerAvatarPreview.attr('src', customerData.avatar_url || posBaseParams.default_avatar_url || '');
+        if (customerData.avatar_id && customerData.avatar_url !== posBaseParams.default_avatar_url) { $removeAvatarBtn.show(); }
         else { $removeAvatarBtn.hide(); }
         console.log('Customer form populated for ID:', customerData.id);
     }
@@ -554,8 +565,8 @@ jQuery(function ($) {
         if (customerData && customerData.id) {
             currentCustomerId = customerData.id;
             const displayName = `${customerData.first_name || ''} ${customerData.last_name || ''}`.trim();
-            $selectedCustomerName.text(displayName || (posStreamingParams.i18n?.anonymous || 'Invitado'));
-            $selectedCustomerAvatar.attr('src', customerData.avatar_url || posStreamingParams.default_avatar_url || '');
+            $selectedCustomerName.text(displayName || (posBaseParams.i18n?.anonymous || 'Invitado'));
+            $selectedCustomerAvatar.attr('src', customerData.avatar_url || posBaseParams.default_avatar_url || '');
             $selectedCustomerInfo.show(); $customerSearchSection.hide(); $customerSearchResults.hide().empty();
         } else { handleDeselectCustomer(); }
         updateCheckoutButtonState();
@@ -569,18 +580,18 @@ jQuery(function ($) {
     function handleOpenEditCustomerModal() {
         if (!currentCustomerId || isLoadingCustomerAction) { console.warn("No customer selected or action in progress."); return; }
         console.log('Opening modal to edit customer ID:', currentCustomerId);
-        isLoadingCustomerAction = true; showLoading(posStreamingParams.i18n?.loading_customer_data || 'Cargando datos...');
+        isLoadingCustomerAction = true; showLoading(posBaseParams.i18n?.loading_customer_data || 'Cargando datos...');
         getCustomerData(currentCustomerId)
             .done(customerData => {
                 hideLoading(); populateCustomerForm(customerData);
                 if (typeof tb_show !== 'undefined') {
-                    tb_show(posStreamingParams.i18n?.edit_customer || 'Editar Cliente', '#TB_inline?width=600&height=350&inlineId=pos-customer-modal-content', null);
+                    tb_show(posBaseParams.i18n?.edit_customer || 'Editar Cliente', '#TB_inline?width=600&height=350&inlineId=pos-customer-modal-content', null);
                     setTimeout(initializeIntlTelInput, 150);
                 } else { console.error('Thickbox (tb_show) no está definido.'); if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se pudo abrir el editor.', 'error'); }
             })
             .fail(error => {
                 hideLoading(); console.error("Error fetching customer data:", error);
-                const errorMsg = error?.responseJSON?.message || posStreamingParams.i18n?.error_general || 'Error al cargar datos.';
+                const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.error_general || 'Error al cargar datos.';
                 if (typeof Swal !== 'undefined') Swal.fire('Error', errorMsg, 'error');
             })
             .always(() => { isLoadingCustomerAction = false; });
@@ -592,7 +603,7 @@ jQuery(function ($) {
         const firstName = $customerFirstNameInput.val().trim();
         if (!firstName) {
             console.log('Save aborted: First name is empty.');
-            showCustomerFormFeedback(posStreamingParams.i18n?.customer_required_fields + ' (Nombre)', true);
+            showCustomerFormFeedback(posBaseParams.i18n?.customer_required_fields + ' (Nombre)', true);
             $customerFirstNameInput.focus(); return;
         }
         let phoneNumber = '';
@@ -624,19 +635,19 @@ jQuery(function ($) {
         };
         const customerId = $customerIdInput.val(); const isEditing = !!customerId;
         console.log('Saving customer...', customerData, 'Is Editing:', isEditing);
-        isLoadingCustomerAction = true; showLoading(posStreamingParams.i18n?.saving || 'Guardando...');
+        isLoadingCustomerAction = true; showLoading(posBaseParams.i18n?.saving || 'Guardando...');
         $saveCustomerBtn.prop('disabled', true);
         saveCustomerData(customerData, customerId)
             .done(savedCustomer => {
                 console.log('Save successful:', savedCustomer); hideLoading();
                 if (typeof tb_remove !== 'undefined') tb_remove();
                 updateSelectedCustomerDisplay(savedCustomer);
-                if (typeof Swal !== 'undefined') { Swal.fire({ icon: 'success', title: posStreamingParams.i18n?.customer_saved_success || 'Cliente guardado', timer: 1500, showConfirmButton: false }); }
+                if (typeof Swal !== 'undefined') { Swal.fire({ icon: 'success', title: posBaseParams.i18n?.customer_saved_success || 'Cliente guardado', timer: 1500, showConfirmButton: false }); }
                 $customerSearchInput.val(''); $customerSearchResults.hide().empty();
             })
             .fail(error => {
                 console.error('Save failed:', error); hideLoading();
-                const errorMsg = error?.responseJSON?.message || posStreamingParams.i18n?.customer_saved_error || 'Error al guardar.';
+                const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.customer_saved_error || 'Error al guardar.';
                 showCustomerFormFeedback(errorMsg, true);
             })
             .always(() => {
@@ -651,7 +662,7 @@ jQuery(function ($) {
 
     function handleDeselectCustomer() {
         currentCustomerId = null; $selectedCustomerInfo.hide(); $selectedCustomerName.text('');
-        $selectedCustomerAvatar.attr('src', posStreamingParams.default_avatar_url || '');
+        $selectedCustomerAvatar.attr('src', posBaseParams.default_avatar_url || '');
         $customerSearchSection.show(); $customerSearchInput.val('').focus(); $customerSearchResults.hide().empty();
         console.log('Customer deselected'); updateCheckoutButtonState();
     }
@@ -664,8 +675,8 @@ jQuery(function ($) {
             if (typeof Swal !== 'undefined') Swal.fire('Error', 'El cargador de medios no está disponible.', 'error'); return;
         }
         mediaFrame = wp.media({
-            title: posStreamingParams.i18n?.select_avatar_title || 'Seleccionar Avatar',
-            button: { text: posStreamingParams.i18n?.use_this_avatar || 'Usar imagen' },
+            title: posBaseParams.i18n?.select_avatar_title || 'Seleccionar Avatar',
+            button: { text: posBaseParams.i18n?.use_this_avatar || 'Usar imagen' },
             library: { type: 'image' }, multiple: false
         });
         mediaFrame.on('select', function () {
@@ -678,28 +689,28 @@ jQuery(function ($) {
     }
 
     function handleRemoveAvatar() {
-        $customerAvatarPreview.attr('src', posStreamingParams.default_avatar_url || '');
+        $customerAvatarPreview.attr('src', posBaseParams.default_avatar_url || '');
         $customerAvatarIdInput.val(''); $removeAvatarBtn.hide(); console.log('Avatar removed');
     }
 
     function searchCustomers(searchTerm) {
-        const url = `${posStreamingParams.rest_url}customers?search=${encodeURIComponent(searchTerm)}&per_page=10`;
+        const url = `${posBaseParams.rest_url}customers?search=${encodeURIComponent(searchTerm)}&per_page=10`;
         console.log(`API Call (Customer Search): GET ${url}`);
-        return $.ajax({ url: url, method: 'GET', beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce) });
+        return $.ajax({ url: url, method: 'GET', beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce) });
     }
 
     function getCustomerData(customerId) {
-        const url = `${posStreamingParams.rest_url}customers/${customerId}`;
+        const url = `${posBaseParams.rest_url}customers/${customerId}`;
         console.log(`API Call (Get Customer): GET ${url}`);
-        return $.ajax({ url: url, method: 'GET', beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce) });
+        return $.ajax({ url: url, method: 'GET', beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce) });
     }
 
     function saveCustomerData(data, customerId = null) {
         const method = customerId ? 'PUT' : 'POST';
-        const url = customerId ? `${posStreamingParams.rest_url}customers/${customerId}` : `${posStreamingParams.rest_url}customers`;
+        const url = customerId ? `${posBaseParams.rest_url}customers/${customerId}` : `${posBaseParams.rest_url}customers`;
         console.log(`API Call (Save Customer): ${method} ${url}`, data);
         return $.ajax({
-            url: url, method: method, beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce),
+            url: url, method: method, beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce),
             contentType: 'application/json', data: JSON.stringify(data)
         });
     }
@@ -709,22 +720,22 @@ jQuery(function ($) {
         if (searchTerm.length < 2) { $customerSearchResults.hide().empty(); return; }
         customerDebounceTimer = setTimeout(() => {
             console.log(`Debounce: Buscando cliente "${searchTerm}"`);
-            $customerSearchResults.html(`<li class="loading">${posStreamingParams.i18n?.searching || 'Buscando...'}</li>`).show();
+            $customerSearchResults.html(`<li class="loading">${posBaseParams.i18n?.searching || 'Buscando...'}</li>`).show();
             searchCustomers(searchTerm)
                 .done(results => { renderCustomerSearchResults(results); })
-                .fail(error => { console.error('Error buscando clientes:', error); $customerSearchResults.html(`<li class="error">${posStreamingParams.i18n?.search_error || 'Error al buscar.'}</li>`).show(); });
+                .fail(error => { console.error('Error buscando clientes:', error); $customerSearchResults.html(`<li class="error">${posBaseParams.i18n?.search_error || 'Error al buscar.'}</li>`).show(); });
         }, DEBOUNCE_DELAY);
     }
 
     function renderCustomerSearchResults(results) {
         $customerSearchResults.empty();
         if (!Array.isArray(results) || results.length === 0) {
-            $customerSearchResults.html(`<li class="no-results">${posStreamingParams.i18n?.no_customers_found || 'No se encontraron clientes.'}</li>`).show(); return;
+            $customerSearchResults.html(`<li class="no-results">${posBaseParams.i18n?.no_customers_found || 'No se encontraron clientes.'}</li>`).show(); return;
         }
         results.forEach(customer => {
             const displayName = `${customer.first_name || ''} ${customer.last_name || ''}`.trim();
             const email = customer.email || ''; const phone = customer.phone || '';
-            const avatarUrl = customer.avatar_url || posStreamingParams.default_avatar_url || '';
+            const avatarUrl = customer.avatar_url || posBaseParams.default_avatar_url || '';
             const resultItem = $(`
                 <li data-customer-id="${customer.id}">
                     <img src="${avatarUrl}" alt="" width="30" height="30">
@@ -812,15 +823,15 @@ jQuery(function ($) {
         console.log("Datos del pedido a enviar:", orderData);
 
         isLoadingCheckoutAction = true;
-        completeSaleButton.prop('disabled', true).text(posStreamingParams.i18n?.processing || 'Procesando...');
-        showLoading(posStreamingParams.i18n?.creating_order || 'Creando pedido...');
+        completeSaleButton.prop('disabled', true).text(posBaseParams.i18n?.processing || 'Procesando...');
+        showLoading(posBaseParams.i18n?.creating_order || 'Creando pedido...');
 
         createOrder(orderData)
             .done(response => {
                 hideLoading();
                 Swal.fire({
                     icon: 'success',
-                    title: posStreamingParams.i18n?.order_created_success || '¡Pedido Creado!',
+                    title: posBaseParams.i18n?.order_created_success || '¡Pedido Creado!',
                     text: `Pedido #${response.id} creado correctamente.`,
                     showConfirmButton: true
                 });
@@ -830,32 +841,32 @@ jQuery(function ($) {
             .fail(error => {
                 hideLoading();
                 console.error("Error creando pedido:", error);
-                const errorMsg = error?.responseJSON?.message || posStreamingParams.i18n?.order_created_error || 'Error al crear el pedido.';
+                const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.order_created_error || 'Error al crear el pedido.';
                 Swal.fire('Error', errorMsg, 'error');
             })
             .always(() => {
                 isLoadingCheckoutAction = false;
-                completeSaleButton.text(posStreamingParams.i18n?.complete_sale || 'Completar Venta');
+                completeSaleButton.text(posBaseParams.i18n?.complete_sale || 'Completar Venta');
                 updateCheckoutButtonState();
             });
     }
 
     async function loadPaymentMethods() {
-        const placeholderOption = `<option value="" disabled selected>${posStreamingParams.i18n?.loading_payment_methods || 'Cargando métodos...'}</option>`;
+        const placeholderOption = `<option value="" disabled selected>${posBaseParams.i18n?.loading_payment_methods || 'Cargando métodos...'}</option>`;
         $paymentMethodSelect.html(placeholderOption).prop('disabled', true);
 
-        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
-            console.error('loadPaymentMethods: posStreamingParams no está definido o incompleto.');
-            $paymentMethodSelect.html(`<option value="" disabled selected>${posStreamingParams.i18n?.error_loading_payment_methods || 'Error config.'}</option>`);
+        if (typeof posBaseParams === 'undefined' || !posBaseParams.rest_url || !posBaseParams.nonce) {
+            console.error('loadPaymentMethods: posBaseParams no está definido o incompleto.');
+            $paymentMethodSelect.html(`<option value="" disabled selected>${posBaseParams.i18n?.error_loading_payment_methods || 'Error config.'}</option>`);
             return;
         }
 
         try {
-            const apiUrl = `${posStreamingParams.rest_url}payment-gateways`;
+            const apiUrl = `${posBaseParams.rest_url}payment-gateways`;
             console.log(`API Call (Payment Gateways): GET ${apiUrl}`);
             const response = await fetch(apiUrl, {
                 method: 'GET',
-                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': posStreamingParams.nonce }
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': posBaseParams.nonce }
             });
 
             if (!response.ok) {
@@ -868,7 +879,7 @@ jQuery(function ($) {
 
             if (Array.isArray(gateways) && gateways.length > 0) {
                 $paymentMethodSelect.empty();
-                $paymentMethodSelect.append(`<option value="" disabled selected>${posStreamingParams.i18n?.select_payment_method || '-- Selecciona Método --'}</option>`);
+                $paymentMethodSelect.append(`<option value="" disabled selected>${posBaseParams.i18n?.select_payment_method || '-- Selecciona Método --'}</option>`);
                 gateways.forEach(gateway => {
                     const escapedTitle = $('<div>').text(gateway.title).html();
                     $paymentMethodSelect.append(`<option value="${gateway.id}">${escapedTitle}</option>`);
@@ -876,22 +887,22 @@ jQuery(function ($) {
                 $paymentMethodSelect.prop('disabled', false);
                 console.log('Métodos de pago cargados:', gateways);
             } else {
-                $paymentMethodSelect.html(`<option value="" disabled selected>${posStreamingParams.i18n?.no_payment_methods || 'No hay métodos'}</option>`);
+                $paymentMethodSelect.html(`<option value="" disabled selected>${posBaseParams.i18n?.no_payment_methods || 'No hay métodos'}</option>`);
                 console.warn('No se encontraron métodos de pago activos.');
             }
 
         } catch (error) {
             console.error('Error cargando métodos de pago:', error);
-            $paymentMethodSelect.html(`<option value="" disabled selected>${posStreamingParams.i18n?.error_loading_payment_methods || 'Error al cargar'}</option>`);
+            $paymentMethodSelect.html(`<option value="" disabled selected>${posBaseParams.i18n?.error_loading_payment_methods || 'Error al cargar'}</option>`);
         }
     }
 
     function createOrder(orderData) {
-        const url = `${posStreamingParams.rest_url}orders`;
+        const url = `${posBaseParams.rest_url}orders`;
         console.log(`API Call (Create Order): POST ${url}`, orderData);
         return $.ajax({
             url: url, method: 'POST',
-            beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce),
+            beforeSend: xhr => xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce),
             contentType: 'application/json',
             data: JSON.stringify(orderData)
         });
@@ -913,7 +924,7 @@ jQuery(function ($) {
         const calendarEl = document.getElementById('pos-calendar');
         if (!calendarEl) { console.error('Elemento del calendario #pos-calendar no encontrado.'); return; }
         if (typeof FullCalendar === 'undefined') { console.error('Librería FullCalendar no cargada.'); calendarEl.innerHTML = '<p style="color:red;">Error: Librería del calendario no disponible.</p>'; return; }
-        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) { console.error('initCalendar: posStreamingParams no está definido o incompleto.'); calendarEl.innerHTML = '<p style="color:red;">Error de configuración para cargar eventos.</p>'; return; }
+        if (typeof posBaseParams === 'undefined' || !posBaseParams.rest_url || !posBaseParams.nonce) { console.error('initCalendar: posBaseParams no está definido o incompleto.'); calendarEl.innerHTML = '<p style="color:red;">Error de configuración para cargar eventos.</p>'; return; }
 
         // Destruir instancia anterior si existe (para evitar duplicados al recargar)
         if (calendar) {
@@ -927,7 +938,7 @@ jQuery(function ($) {
             buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', list: 'Lista' },
             navLinks: true, editable: false, dayMaxEvents: true,
             events: {
-                url: `${posStreamingParams.rest_url}calendar-events?_wpnonce=${posStreamingParams.nonce}`,
+                url: `${posBaseParams.rest_url}calendar-events?_wpnonce=${posBaseParams.nonce}`,
                 method: 'GET',
                 failure: function(error) {
                     console.error('Error cargando eventos del calendario:', error);
@@ -939,8 +950,8 @@ jQuery(function ($) {
                 const eventData = info.event; const props = eventData.extendedProps;
                 console.log('Evento clickeado:', eventData);
                 if (props.order_url) { window.open(props.order_url, '_blank'); }
-                else if (props.order_id && posStreamingParams.admin_url) {
-                    const editUrl = `${posStreamingParams.admin_url}admin.php?page=wc-orders&action=edit&id=${props.order_id}`;
+                else if (props.order_id && posBaseParams.admin_url) {
+                    const editUrl = `${posBaseParams.admin_url}admin.php?page=wc-orders&action=edit&id=${props.order_id}`;
                     window.open(editUrl, '_blank');
                 } else { Swal.fire('Info', `Vencimiento: ${eventData.title}${props.order_id ? `\nPedido ID: ${props.order_id}` : ''}`, 'info'); }
             },
@@ -970,8 +981,8 @@ jQuery(function ($) {
             $salesTable.replaceWith('<p style="color:red;">Error: Librería DataTables no disponible.</p>');
             return;
         }
-        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
-            console.error('initSalesDataTable: posStreamingParams no está definido o incompleto.');
+        if (typeof posBaseParams === 'undefined' || !posBaseParams.rest_url || !posBaseParams.nonce) {
+            console.error('initSalesDataTable: posBaseParams no está definido o incompleto.');
             $salesTable.replaceWith('<p style="color:red;">Error de configuración para cargar datos de ventas.</p>');
             return;
         }
@@ -988,11 +999,11 @@ jQuery(function ($) {
             processing: true, // Muestra indicador de procesamiento
             serverSide: true, // Habilita procesamiento del lado del servidor
             ajax: {
-                url: `${posStreamingParams.rest_url}sales-datatable`, // URL del endpoint API
+                url: `${posBaseParams.rest_url}sales-datatable`, // URL del endpoint API
                 type: 'GET',
                 // Añadir el nonce a la cabecera de la petición AJAX
                 beforeSend: function (xhr) {
-                    xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce);
+                    xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce);
                 },
                 // Especificar que los datos vienen en la propiedad 'data' de la respuesta JSON
                 dataSrc: 'data',
@@ -1002,7 +1013,7 @@ jQuery(function ($) {
                     console.log("Respuesta del servidor:", xhr.responseText);
                     // Mostrar un mensaje de error al usuario en la tabla
                     $salesTable.find('tbody').html(
-                        '<tr><td colspan="7" class="dataTables_empty">' + (posStreamingParams.i18n?.dt_error || 'Error al cargar los datos.') + '</td></tr>'
+                        '<tr><td colspan="7" class="dataTables_empty">' + (posBaseParams.i18n?.dt_error || 'Error al cargar los datos.') + '</td></tr>'
                     );
                     // Opcional: usar SweetAlert
                     // if (typeof Swal !== 'undefined') { Swal.fire('Error', 'No se pudieron cargar las ventas.', 'error'); }
@@ -1018,26 +1029,26 @@ jQuery(function ($) {
                 { data: 5, name: 'note', orderable: false, searchable: false }, // Notas (índice 5), no ordenable/buscable por defecto
                 { data: 6, name: 'meta', orderable: false, searchable: false }  // Meta (índice 6), no ordenable/buscable
             ],
-            // Configuración del idioma usando las traducciones de posStreamingParams
+            // Configuración del idioma usando las traducciones de posBaseParams
             language: {
-                processing: posStreamingParams.i18n?.dt_processing || 'Procesando...',
-                search: posStreamingParams.i18n?.dt_search || 'Buscar:',
-                lengthMenu: posStreamingParams.i18n?.dt_lengthMenu || 'Mostrar _MENU_ registros',
-                info: posStreamingParams.i18n?.dt_info || 'Mostrando _START_ a _END_ de _TOTAL_ registros',
-                infoEmpty: posStreamingParams.i18n?.dt_infoEmpty || 'Mostrando 0 a 0 de 0 registros',
-                infoFiltered: posStreamingParams.i18n?.dt_infoFiltered || '(filtrado de _MAX_ registros totales)',
-                loadingRecords: posStreamingParams.i18n?.dt_loadingRecords || 'Cargando...',
-                zeroRecords: posStreamingParams.i18n?.dt_zeroRecords || 'No se encontraron registros coincidentes',
-                emptyTable: posStreamingParams.i18n?.dt_emptyTable || 'No hay datos disponibles en la tabla',
+                processing: posBaseParams.i18n?.dt_processing || 'Procesando...',
+                search: posBaseParams.i18n?.dt_search || 'Buscar:',
+                lengthMenu: posBaseParams.i18n?.dt_lengthMenu || 'Mostrar _MENU_ registros',
+                info: posBaseParams.i18n?.dt_info || 'Mostrando _START_ a _END_ de _TOTAL_ registros',
+                infoEmpty: posBaseParams.i18n?.dt_infoEmpty || 'Mostrando 0 a 0 de 0 registros',
+                infoFiltered: posBaseParams.i18n?.dt_infoFiltered || '(filtrado de _MAX_ registros totales)',
+                loadingRecords: posBaseParams.i18n?.dt_loadingRecords || 'Cargando...',
+                zeroRecords: posBaseParams.i18n?.dt_zeroRecords || 'No se encontraron registros coincidentes',
+                emptyTable: posBaseParams.i18n?.dt_emptyTable || 'No hay datos disponibles en la tabla',
                 paginate: {
-                    first: posStreamingParams.i18n?.dt_paginate_first || 'Primero',
-                    previous: posStreamingParams.i18n?.dt_paginate_previous || 'Anterior',
-                    next: posStreamingParams.i18n?.dt_paginate_next || 'Siguiente',
-                    last: posStreamingParams.i18n?.dt_paginate_last || 'Último'
+                    first: posBaseParams.i18n?.dt_paginate_first || 'Primero',
+                    previous: posBaseParams.i18n?.dt_paginate_previous || 'Anterior',
+                    next: posBaseParams.i18n?.dt_paginate_next || 'Siguiente',
+                    last: posBaseParams.i18n?.dt_paginate_last || 'Último'
                 },
                 aria: {
-                    sortAscending: posStreamingParams.i18n?.dt_aria_sortAscending || ': activar para ordenar la columna ascendente',
-                    sortDescending: posStreamingParams.i18n?.dt_aria_sortDescending || ': activar para ordenar la columna descendente'
+                    sortAscending: posBaseParams.i18n?.dt_aria_sortAscending || ': activar para ordenar la columna ascendente',
+                    sortDescending: posBaseParams.i18n?.dt_aria_sortDescending || ': activar para ordenar la columna descendente'
                 }
             },
             // Orden inicial (por fecha, descendente)
@@ -1115,14 +1126,14 @@ jQuery(function ($) {
     // --- Inicialización ---
     function init() {
         console.log('POS Streaming App Initializing...');
-        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
-            console.error('FATAL: posStreamingParams no disponible. Abortando.');
+        if (typeof posBaseParams === 'undefined' || !posBaseParams.rest_url || !posBaseParams.nonce) {
+            console.error('FATAL: posBaseParams no disponible. Abortando.');
             $('body').prepend('<div class="notice notice-error"><p>Error crítico: Faltan parámetros de configuración del plugin POS Streaming.</p></div>');
             return;
         }
-        console.log('posStreamingParams OK:', posStreamingParams);
-        productSearchInput.attr('placeholder', posStreamingParams.i18n?.search_placeholder || 'Buscar producto...');
-        $customerSearchInput.attr('placeholder', posStreamingParams.i18n?.search_customer_placeholder || 'Buscar cliente...');
+        console.log('posBaseParams OK:', posBaseParams);
+        productSearchInput.attr('placeholder', posBaseParams.i18n?.search_placeholder || 'Buscar producto...');
+        $customerSearchInput.attr('placeholder', posBaseParams.i18n?.search_customer_placeholder || 'Buscar cliente...');
 
         bindEvents();
         fetchProducts('', 1, true);

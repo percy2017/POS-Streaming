@@ -15,11 +15,11 @@ defined( 'ABSPATH' ) or die( '¡No tienes permiso para acceder aquí!' );
  * @param string $post_type El tipo de post actual (puede variar con HPOS).
  * @param WP_Post|object $post El objeto del post actual (o pantalla).
  */
-function pos_streaming_add_order_metabox( $post_type, $post ) {
+function pos_base_add_order_metabox( $post_type, $post ) {
     $screen = get_current_screen(); // Obtener el objeto de la pantalla actual
 
     // Log para ver qué pantalla detecta WordPress
-    error_log("POS Streaming DEBUG: pos_streaming_add_order_metabox() - Hook 'add_meta_boxes' disparado. Screen ID: " . ($screen ? $screen->id : 'N/A') . ", Post Type: " . $post_type);
+    error_log("POS Streaming DEBUG: pos_base_add_order_metabox() - Hook 'add_meta_boxes' disparado. Screen ID: " . ($screen ? $screen->id : 'N/A') . ", Post Type: " . $post_type);
 
     // Comprobar si estamos en la pantalla de edición de pedidos de WooCommerce
     $is_order_edit_screen = false;
@@ -42,19 +42,19 @@ function pos_streaming_add_order_metabox( $post_type, $post ) {
     // --- Añadir el metabox solo si estamos en la pantalla correcta ---
     if ( $is_order_edit_screen && $target_screen_id ) {
 
-        error_log("POS Streaming DEBUG: pos_streaming_add_order_metabox() - Es pantalla de edición de pedido. Ejecutando add_meta_box() para pantalla ID: " . $target_screen_id);
+        error_log("POS Streaming DEBUG: pos_base_add_order_metabox() - Es pantalla de edición de pedido. Ejecutando add_meta_box() para pantalla ID: " . $target_screen_id);
 
         add_meta_box(
-            'pos_streaming_order_details',                // ID único
-            __( 'Detalles POS Streaming', 'pos-streaming' ), // Título
-            'pos_streaming_order_metabox_callback',       // Callback
+            'pos_base_order_details',                // ID único
+            __( 'Detalles POS', 'pos-base' ), // Título
+            'pos_base_order_metabox_callback',       // Callback
             $target_screen_id,                            // <-- USAR EL ID DE PANTALLA DETECTADO
             'side',                                       // Contexto
             'low'                                         // Prioridad
         );
-        error_log('POS Streaming DEBUG: pos_streaming_add_order_metabox() - add_meta_box() ejecutado.');
+        error_log('POS Streaming DEBUG: pos_base_add_order_metabox() - add_meta_box() ejecutado.');
     } else {
-         error_log("POS Streaming DEBUG: pos_streaming_add_order_metabox() - No es pantalla de edición de pedido o falta ID de pantalla. No se añade metabox.");
+         error_log("POS Streaming DEBUG: pos_base_add_order_metabox() - No es pantalla de edición de pedido o falta ID de pantalla. No se añade metabox.");
     }
 }
 
@@ -65,9 +65,9 @@ function pos_streaming_add_order_metabox( $post_type, $post ) {
  *
  * @param WP_Post|WC_Order $post_or_order_object Objeto del post o del pedido.
  */
-function pos_streaming_order_metabox_callback( $post_or_order_object ) {
+function pos_base_order_metabox_callback( $post_or_order_object ) {
      // --- LOG DE DEBUG ---
-     error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Función llamada.');
+     error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Función llamada.');
      // --------------------
 
     // --- Obtener el ID del pedido correctamente ---
@@ -76,25 +76,25 @@ function pos_streaming_order_metabox_callback( $post_or_order_object ) {
     if ( $post_or_order_object instanceof WP_Post ) {
         $order_id = $post_or_order_object->ID;
         $order = wc_get_order($order_id);
-        error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Recibido WP_Post, Order ID: ' . $order_id);
+        error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Recibido WP_Post, Order ID: ' . $order_id);
     } elseif ( class_exists('WC_Order') && $post_or_order_object instanceof WC_Order ) {
         $order_id = $post_or_order_object->get_id();
         $order = $post_or_order_object;
-        error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Recibido WC_Order, Order ID: ' . $order_id);
+        error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Recibido WC_Order, Order ID: ' . $order_id);
     } else {
          // HPOS puede pasar otros objetos, intentar obtener ID si es posible
          if (is_object($post_or_order_object) && isset($post_or_order_object->id)) {
               $order_id = $post_or_order_object->id;
               $order = wc_get_order($order_id);
-              error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Recibido objeto desconocido, Order ID (supuesto): ' . $order_id);
+              error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Recibido objeto desconocido, Order ID (supuesto): ' . $order_id);
          } else {
-             error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Error: Objeto recibido no reconocido.');
+             error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Error: Objeto recibido no reconocido.');
          }
     }
 
 
     if ( ! $order_id || !$order ) {
-        error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Error: No se pudo obtener order_id u objeto WC_Order.');
+        error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Error: No se pudo obtener order_id u objeto WC_Order.');
         echo '<p>' . esc_html__( 'Error: No se pudo obtener la información del pedido.', 'pos-streaming' ) . '</p>';
         return;
     }
@@ -102,14 +102,14 @@ function pos_streaming_order_metabox_callback( $post_or_order_object ) {
 
     // ... (resto del código del callback sin cambios: nonce, get_meta, echo HTML) ...
      // Añadir un nonce field por seguridad
-    wp_nonce_field( 'pos_streaming_save_order_meta', 'pos_streaming_order_nonce' );
+    wp_nonce_field( 'pos_base_save_order_meta', 'pos_base_order_nonce' );
 
     // Obtener los metadatos guardados usando el $order_id
     $sale_type = $order->get_meta( '_pos_sale_type', true );
     $sub_title = $order->get_meta( '_pos_subscription_title', true );
     $sub_expiry = $order->get_meta( '_pos_subscription_expiry_date', true );
     $sub_color = $order->get_meta( '_pos_subscription_color', true );
-    error_log('POS Streaming DEBUG: pos_streaming_order_metabox_callback() - Metadatos leídos: ' . print_r(compact('sale_type', 'sub_title', 'sub_expiry', 'sub_color'), true));
+    error_log('POS Streaming DEBUG: pos_base_order_metabox_callback() - Metadatos leídos: ' . print_r(compact('sale_type', 'sub_title', 'sub_expiry', 'sub_color'), true));
 
 
     echo '<div class="pos-metabox-content">';

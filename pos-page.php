@@ -1,71 +1,87 @@
 <?php
 /**
- * Funciones para crear la página de administración del POS Streaming.
+ * Funciones para crear la página de administración del POS Base.
  */
 
 // Evitar acceso directo al archivo
 defined( 'ABSPATH' ) or die( '¡No tienes permiso para acceder aquí!' );
 
 /**
- * Añade la página del menú para el POS Streaming y su submenú principal.
+ * Añade la página del menú para el POS Base y sus submenús.
  */
-function pos_streaming_add_admin_menu() {
+function pos_base_add_admin_menu() { // <--- RENOMBRADA
 
+    // Menú Principal
     add_menu_page(
-        __( 'POS Streaming', 'pos-streaming' ),
-        __( 'POS Streaming', 'pos-streaming' ),
-        'manage_woocommerce',
-        'pos-streaming',      // Slug del menú principal
-        'pos_streaming_render_page', // Función que renderiza la página principal
-        'dashicons-store',
-        58
-    );
-    add_submenu_page(
-        'pos-streaming',          // Slug del menú padre
-        __( 'Punto de Venta', 'pos-streaming' ), // Título de la página
-        __( 'POS', 'pos-streaming' ), // Título del submenú
-        'manage_woocommerce',     // Capacidad
-        'pos-streaming',          // <-- MISMO SLUG que add_menu_page
-        'pos_streaming_render_page' // <-- MISMA FUNCIÓN callback que add_menu_page
+        __( 'POS Base', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
+        __( 'POS Base', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
+        'manage_woocommerce',                   // Capacidad
+        'pos-base',                             // <--- NUEVO SLUG PRINCIPAL
+        'pos_base_render_page',                 // <--- FUNCIÓN RENOMBRADA
+        'dashicons-store',                      // Icono
+        58                                      // Posición
     );
 
-    // **NUEVO:** Submenú: Configuración
+    // Submenú: POS (apunta a la misma página que el menú principal)
     add_submenu_page(
-        'pos-streaming',                        // Slug del menú padre
-        __( 'Configuración POS', 'pos-base' ),  // Título de la página
-        __( 'Configuración', 'pos-base' ),      // Título del submenú
-        'manage_options',                       // Capacidad (normalmente admin para ajustes)
-        'pos-streaming-settings',               // Slug ÚNICO para esta página
-        'pos_streaming_render_settings_page'    // NUEVA función callback para renderizarla
+        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
+        __( 'Punto de Venta', 'pos-streaming' ),// Título de la página (Mantenemos 'pos-streaming' para contenido)
+        __( 'POS', 'pos-streaming' ),           // Título del submenú (Mantenemos 'pos-streaming')
+        'manage_woocommerce',                   // Capacidad
+        'pos-base',                             // <--- MISMO SLUG que add_menu_page (Actualizado)
+        'pos_base_render_page'                  // <--- MISMA FUNCIÓN callback (Actualizado)
     );
+
+    // Submenú: Configuración
+    add_submenu_page(
+        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
+        __( 'Configuración POS', 'pos-base' ),  // Título de la página (Nuevo Text Domain)
+        __( 'Configuración', 'pos-base' ),      // Título del submenú (Nuevo Text Domain)
+        'manage_options',                       // Capacidad (admin)
+        'pos-base-settings',                    // <--- NUEVO SLUG para esta página
+        'pos_base_render_settings_page'         // <--- FUNCIÓN RENOMBRADA
+    );
+
+    // NOTA: El submenú de Proveedores ('pos_streaming_render_providers_page')
+    // probablemente debería moverse al módulo 'streaming' más adelante.
+    // Por ahora, lo dejamos comentado o lo puedes eliminar si ya no lo necesitas aquí.
+    /*
+    add_submenu_page(
+        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
+        __( 'Proveedores', 'pos-streaming' ),   // Título página (Mantenemos 'pos-streaming')
+        __( 'Proveedores', 'pos-streaming' ),   // Título submenú (Mantenemos 'pos-streaming')
+        'manage_woocommerce',                   // Capacidad
+        'pos-base-providers',                   // <--- NUEVO SLUG (si se mantiene)
+        'pos_base_render_providers_page'        // <--- FUNCIÓN RENOMBRADA (si se mantiene)
+    );
+    */
 }
-add_action( 'admin_menu', 'pos_streaming_add_admin_menu' );
-
-
+add_action( 'admin_menu', 'pos_base_add_admin_menu' ); // <--- FUNCIÓN RENOMBRADA
 
 
 /**
- * Renderiza el contenido HTML de la página del POS Streaming.
+ * Renderiza el contenido HTML de la página principal del POS.
  * Incluye estructura de pestañas (tabs).
  */
-function pos_streaming_render_page() {
+function pos_base_render_page() { // <--- RENOMBRADA
     // Comprobación de seguridad
     if ( ! current_user_can( 'manage_woocommerce' ) ) {
-        wp_die( esc_html__( 'No tienes permisos suficientes para acceder a esta página.', 'pos-streaming' ) );
+        // Usamos 'pos-base' para este mensaje general de permisos
+        wp_die( esc_html__( 'No tienes permisos suficientes para acceder a esta página.', 'pos-base' ) );
     }
 
     ?>
-    <div class="wrap" id="pos-streaming-app-wrapper">
-        <!-- <h1><?php // echo esc_html__( 'POS Streaming - Punto de Venta', 'pos-streaming' ); ?></h1> -->
+    <div class="wrap" id="pos-base-app-wrapper"> <?php // ID actualizado si quieres ?>
+        <!-- <h1><?php // echo esc_html__( 'POS Base - Punto de Venta', 'pos-base' ); ?></h1> -->
 
-        <!-- Pestañas de Navegación -->
+        <!-- Pestañas de Navegación (Mantenemos 'pos-streaming' para contenido específico) -->
         <h2 class="nav-tab-wrapper">
             <a href="#pos-tab-pos" class="nav-tab nav-tab-active" data-tab="pos"><?php esc_html_e( 'POS', 'pos-streaming' ); ?></a>
             <a href="#pos-tab-calendar" class="nav-tab" data-tab="calendar"><?php esc_html_e( 'Calendario', 'pos-streaming' ); ?></a>
             <a href="#pos-tab-sales" class="nav-tab" data-tab="sales"><?php esc_html_e( 'Ventas', 'pos-streaming' ); ?></a>
         </h2>
 
-        <!-- Contenido de las Pestañas -->
+        <!-- Contenido de las Pestañas (Mantenemos 'pos-streaming' para contenido específico) -->
         <div id="pos-tab-content-wrapper">
 
             <!-- Pestaña POS -->
@@ -74,7 +90,7 @@ function pos_streaming_render_page() {
                     <!-- Columna Izquierda: Productos -->
                     <div id="pos-left-column">
                         <div id="pos-products-area">
-                            <h2><?php esc_html_e( 'Productos Streaming', 'pos-streaming' ); ?></h2>
+                            <h2><?php esc_html_e( 'Productos', 'pos-streaming' ); // Título genérico ?></h2>
                             <div class="pos-section-content">
                                 <input type="search" id="pos-product-search" placeholder="<?php esc_attr_e( 'Buscar producto por nombre o SKU...', 'pos-streaming' ); ?>">
                                 <div id="pos-product-list">
@@ -82,7 +98,6 @@ function pos_streaming_render_page() {
                                 </div>
                             </div>
                         </div>
-                        <!-- El calendario se movió a su propia pestaña -->
                     </div> <!-- /#pos-left-column -->
 
                     <!-- Columna Derecha: Cliente, Carrito y Pago -->
@@ -135,7 +150,7 @@ function pos_streaming_render_page() {
                                                     <label for="pos-customer-phone"><?php esc_html_e( 'Teléfono:', 'pos-streaming' ); ?></label>
                                                     <input type="tel" id="pos-customer-phone" name="pos_customer_phone" class="regular-text">
                                                 </p>
-                                                <p style="grid-column: 1 / -1;"> <?php // Ocupa todo el ancho ?>
+                                                <p style="grid-column: 1 / -1;">
                                                     <label for="pos-customer-note"><?php esc_html_e( 'Nota del Cliente:', 'pos-streaming' ); ?></label>
                                                     <textarea id="pos-customer-note" name="pos_customer_note" rows="4" class="large-text"></textarea>
                                                 </p>
@@ -202,21 +217,7 @@ function pos_streaming_render_page() {
                                         <label for="pos-subscription-color"><?php esc_html_e( 'Color Evento:', 'pos-streaming' ); ?></label>
                                         <input type="color" id="pos-subscription-color" name="pos_subscription_color" value="#3a87ad">
                                     </p>
-
-                                    <?php // --- NUEVO SELECTOR DE PERFIL --- ?>
-                                    <div id="pos-profile-selector-area" style="margin-top: 10px; padding-top: 10px; border-top: 1px dotted #eee;">
-                                        <p>
-                                            <label for="pos-profile-selector"><?php esc_html_e( 'Asignar Perfil Disponible:', 'pos-streaming' ); ?></label>
-                                            <select id="pos-profile-selector" name="pos_assigned_profile_id">
-                                                <option value=""><?php esc_html_e( 'Cargando / Seleccionar...', 'pos-streaming' ); ?></option>
-                                                <?php // Las opciones se cargarán con JavaScript ?>
-                                            </select>
-                                            <span id="pos-profile-loading-indicator" style="display: none; margin-left: 10px;" class="spinner is-active"></span>
-                                        </p>
-                                        <p id="pos-profile-selector-feedback" style="color: #dc3545; font-style: italic;"></p>
-                                    </div>
-                                    <?php // --- FIN NUEVO SELECTOR --- ?>
-
+                                  
                                 </div>
                                 <div class="pos-payment-method">
                                     <label for="pos-payment-method"><?php esc_html_e( 'Método de Pago:', 'pos-streaming' ); ?></label>
@@ -282,74 +283,37 @@ function pos_streaming_render_page() {
 
         </div> <!-- /#pos-tab-content-wrapper -->
 
-    </div> <!-- /.wrap #pos-streaming-app-wrapper -->
+    </div> <!-- /.wrap #pos-base-app-wrapper -->
     <?php
 }
-
-// **NUEVO:** Función para renderizar la página de Configuración
-function pos_streaming_render_settings_page() {
-    // Comprobación de seguridad - ¿Tiene el usuario permiso para gestionar opciones?
+/**
+ * Renderiza la página de Configuración del POS Base.
+ */
+function pos_base_render_settings_page() {
+    // Comprobación de seguridad
     if ( ! current_user_can( 'manage_options' ) ) {
         wp_die( esc_html__( 'No tienes permisos suficientes para acceder a esta página.', 'pos-base' ) );
     }
 
     ?>
     <div class="wrap">
-        <h1><?php echo esc_html__( 'Configuración de POS Streaming', 'pos-base' ); ?></h1>
+        <h1><?php echo esc_html__( 'Configuración de POS Base', 'pos-base' ); ?></h1>
 
-        <p><?php esc_html_e( 'Aquí podrás configurar los módulos y otras opciones del plugin POS Streaming.', 'pos-base' ); ?></p>
+        <?php settings_errors(); // Muestra los mensajes de error/éxito guardados por la Settings API ?>
 
-        <?php
-        // --- Aquí irá el formulario de configuración usando la API de Ajustes de WordPress ---
-        // Por ahora, solo un marcador de posición.
-        ?>
         <form method="post" action="options.php">
             <?php
-            // settings_fields( 'pos_streaming_options_group' ); // Nombre del grupo de opciones (definir más adelante)
-            // do_settings_sections( 'pos-streaming-settings' ); // Slug de la página de ajustes
-            // submit_button();
+            // Output nonce, action, and option_page fields for a settings page.
+            settings_fields( 'pos_base_options_group' ); // <-- DEBE COINCIDIR con el grupo en register_setting()
+
+            // Output settings sections and fields for the specified page slug.
+            do_settings_sections( 'pos-base-settings' ); // <-- DEBE COINCIDIR con el slug de la página
+
+            // Output save settings button
+            submit_button( __( 'Guardar Cambios', 'pos-base' ) );
             ?>
-            <p><em><?php esc_html_e( 'Próximamente: Opciones de configuración de módulos (Streaming, Hotel, etc.).', 'pos-base' ); ?></em></p>
         </form>
 
-    </div>
-    <?php
-}
-
-
-/**
- * Renderiza el contenido HTML de la página de administración de Proveedores.
- */
-function pos_streaming_render_providers_page() {
-   
-    if ( ! current_user_can( 'manage_woocommerce' ) ) {
-        wp_die( esc_html__( 'No tienes permisos suficientes para acceder a esta página.', 'pos-streaming' ) );
-    }
-
-    $accounts_table = new POS_Accounts_List_Table();
-    $accounts_table->process_bulk_action(); 
-
-    ?>
-    <div class="wrap" id="pos-streaming-providers-wrapper">
-        <h1><?php echo esc_html__( 'Gestión de Proveedores (Cuentas)', 'pos-streaming' ); ?></h1>
-
-        <?php settings_errors( 'pos_accounts_messages' ); ?>
-        <p><?php esc_html_e( 'Aquí puedes ver y gestionar las cuentas principales de tus servicios (proveedores).', 'pos-streaming' ); ?></p>
-        <a href="<?php echo esc_url( admin_url( 'post-new.php?post_type=pos_account' ) ); ?>" class="page-title-action">
-            <?php esc_html_e( 'Añadir Nueva Cuenta', 'pos-streaming' ); ?>
-        </a>
-        <div id="pos-providers-content" style="margin-top: 15px;">
-            <?php $accounts_table->prepare_items(); ?>
-            <form method="post">
-                <?php
-                    wp_nonce_field( 'bulk-' . $accounts_table->_args['plural'] ); // Nonce para acciones masivas
-                    if ( isset( $_REQUEST['page'] ) ) {
-                        echo '<input type="hidden" name="page" value="' . esc_attr( $_REQUEST['page'] ) . '" />';
-                    }
-                ?>
-                <?php $accounts_table->display(); ?>
-            </form>
-        </div>
     </div>
     <?php
 }

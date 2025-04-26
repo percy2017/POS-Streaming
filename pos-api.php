@@ -5,62 +5,138 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
+
 // =========================================================================
 // 1. REGISTRO DE RUTAS API REST
 // =========================================================================
-function pos_streaming_register_rest_routes() {
-    $namespace = 'pos_streaming/v1'; // Namespace de nuestra API
+/**
+ * Registra todas las rutas de la API REST para POS Base.
+ * Define argumentos para validación y sanitización.
+ */
+function pos_base_register_rest_routes() {
+    error_log('POS Base DEBUG: Ejecutando pos_base_register_rest_routes...');
+    $namespace = 'pos-base/v1';
 
     // --- RUTA PARA BUSCAR PRODUCTOS ---
     register_rest_route( $namespace, '/products', array(
         'methods'             => WP_REST_Server::READABLE, // GET
-        'callback'            => 'pos_streaming_api_search_products',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_search_products',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
-            'search' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'page' => array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 1 ),
-            'per_page' => array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 10 ),
-            'featured' => array( 'type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean' ),
+            'search' => array(
+                'description'       => __( 'Término de búsqueda para nombre o SKU del producto.', 'pos-base' ),
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'page' => array(
+                'description'       => __( 'Número de página actual de la colección.', 'pos-base' ),
+                'type'              => 'integer',
+                'default'           => 1,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function( $param ) { return is_numeric( $param ) && $param > 0; },
+            ),
+            'per_page' => array(
+                'description'       => __( 'Número máximo de items a devolver por página.', 'pos-base' ),
+                'type'              => 'integer',
+                'default'           => 50, // Ajusta si tienes una constante diferente
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function( $param ) { return is_numeric( $param ) && $param > 0; },
+            ),
+            'featured' => array(
+                'description'       => __( 'Limitar resultados solo a productos destacados.', 'pos-base' ),
+                'type'              => 'boolean',
+                'default'           => false,
+                'sanitize_callback' => 'rest_sanitize_boolean',
+            ),
+            // Podrías añadir aquí 'context', 'orderby', 'order' si los necesitas
         ),
     ) );
 
     // --- RUTA PARA BUSCAR CLIENTES ---
     register_rest_route( $namespace, '/customers', array(
         'methods'             => WP_REST_Server::READABLE, // GET
-        'callback'            => 'pos_streaming_api_search_customers',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_search_customers',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
-            'search' => array( 'required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'per_page' => array( 'type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 10 ),
+            'search' => array(
+                'description'       => __( 'Término de búsqueda para nombre, email o teléfono del cliente.', 'pos-base' ),
+                'type'              => 'string',
+                'required'          => true, // La búsqueda requiere un término
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'per_page' => array(
+                'description'       => __( 'Número máximo de clientes a devolver.', 'pos-base' ),
+                'type'              => 'integer',
+                'default'           => 10,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function( $param ) { return is_numeric( $param ) && $param > 0; },
+            ),
         ),
     ) );
 
     // --- RUTA PARA OBTENER UN CLIENTE ESPECÍFICO ---
     register_rest_route( $namespace, '/customers/(?P<id>\d+)', array(
         'methods'             => WP_REST_Server::READABLE, // GET
-        'callback'            => 'pos_streaming_api_get_customer',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_get_customer',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
-            'id' => array( 'validate_callback' => function($param, $request, $key) { return is_numeric( $param ); } ),
+            'id' => array(
+                'description'       => __( 'ID único del cliente.', 'pos-base' ),
+                'type'              => 'integer',
+                'required'          => true,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function( $param ) { return is_numeric( $param ) && $param > 0; },
+            ),
         ),
     ) );
 
     // --- RUTA PARA CREAR UN CLIENTE ---
     register_rest_route( $namespace, '/customers', array(
         'methods'             => WP_REST_Server::CREATABLE, // POST
-        'callback'            => 'pos_streaming_api_create_customer',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_create_customer',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
-            'first_name' => array( 'required' => true, 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'last_name'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'email'      => array( 'type' => 'string', 'format' => 'email', 'sanitize_callback' => 'sanitize_email' ),
-            'phone'      => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'meta_data'  => array( // Ahora puede incluir avatar y nota
-                'type' => 'array',
-                'items' => array( 'type' => 'object' ),
-                'properties' => array(
-                    'key' => array('type' => 'string'),
-                    'value' => array(), // Puede ser string (nota) o int (avatar_id)
+            'email' => array(
+                'description'       => __( 'Dirección de correo electrónico del cliente.', 'pos-base' ),
+                'type'              => 'string',
+                'format'            => 'email', // Valida formato email
+                'sanitize_callback' => 'sanitize_email',
+                // 'required'       => true, // Depende si quieres permitir clientes sin email
+            ),
+            'first_name' => array(
+                'description'       => __( 'Nombre del cliente.', 'pos-base' ),
+                'type'              => 'string',
+                'required'          => true, // Generalmente requerido
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'last_name' => array(
+                'description'       => __( 'Apellido del cliente.', 'pos-base' ),
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'phone' => array(
+                'description'       => __( 'Número de teléfono del cliente.', 'pos-base' ),
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field', // O una sanitización más específica para teléfonos
+            ),
+            'meta_data' => array(
+                'description'       => __( 'Metadatos adicionales del cliente (ej: avatar, nota).', 'pos-base' ),
+                'type'              => 'array',
+                'items'             => array(
+                    'type'       => 'object',
+                    'properties' => array(
+                        'key' => array(
+                            'description' => __( 'Clave del metadato.', 'pos-base' ),
+                            'type'        => 'string',
+                            'required'    => true,
+                            'sanitize_callback' => 'sanitize_key',
+                        ),
+                        'value' => array(
+                            'description' => __( 'Valor del metadato.', 'pos-base' ),
+                            'type'        => ['string', 'integer', 'boolean', 'number'], // Permitir varios tipos
+                            // 'sanitize_callback' => 'wp_kses_post', // O sanitizar según el tipo esperado
+                        ),
+                    ),
                 ),
             ),
         ),
@@ -69,21 +145,41 @@ function pos_streaming_register_rest_routes() {
     // --- RUTA PARA ACTUALIZAR UN CLIENTE ---
     register_rest_route( $namespace, '/customers/(?P<id>\d+)', array(
         'methods'             => WP_REST_Server::EDITABLE, // PUT, PATCH
-        'callback'            => 'pos_streaming_api_update_customer',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_update_customer',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
-            'id' => array( 'validate_callback' => function($param, $request, $key) { return is_numeric( $param ); } ),
-            'first_name' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'last_name'  => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'email'      => array( 'type' => 'string', 'format' => 'email', 'sanitize_callback' => 'sanitize_email' ),
-            'phone'      => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
-            'meta_data'  => array( // Ahora puede incluir avatar y nota
-                 'type' => 'array',
-                 'items' => array( 'type' => 'object' ),
-                 'properties' => array(
-                     'key' => array('type' => 'string'),
-                     'value' => array(),
-                 ),
+             'id' => array( // El ID viene de la URL pero lo definimos para claridad/validación
+                'description'       => __( 'ID único del cliente a actualizar.', 'pos-base' ),
+                'type'              => 'integer',
+                'required'          => true,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function( $param ) { return is_numeric( $param ) && $param > 0; },
+            ),
+            'email' => array(
+                'description'       => __( 'Nueva dirección de correo electrónico.', 'pos-base' ),
+                'type'              => 'string',
+                'format'            => 'email',
+                'sanitize_callback' => 'sanitize_email',
+            ),
+            'first_name' => array(
+                'description'       => __( 'Nuevo nombre.', 'pos-base' ),
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'last_name' => array(
+                'description'       => __( 'Nuevo apellido.', 'pos-base' ),
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'phone' => array(
+                'description'       => __( 'Nuevo número de teléfono.', 'pos-base' ),
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
+            'meta_data' => array( // Misma estructura que en la creación
+                'description'       => __( 'Metadatos a actualizar.', 'pos-base' ),
+                'type'              => 'array',
+                'items'             => array( /* ... (igual que en create) ... */ ),
             ),
         ),
     ) );
@@ -91,19 +187,21 @@ function pos_streaming_register_rest_routes() {
     // --- RUTA PARA OBTENER PASARELAS DE PAGO ---
     register_rest_route( $namespace, '/payment-gateways', array(
         'methods'             => WP_REST_Server::READABLE, // GET
-        'callback'            => 'pos_streaming_api_get_payment_gateways',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_get_payment_gateways',
+        'permission_callback' => 'pos_base_api_permissions_check',
+        // No necesita 'args' ya que no toma parámetros de entrada
     ) );
 
     // --- RUTA PARA VALIDAR CUPONES ---
     register_rest_route( $namespace, '/coupons/validate', array(
         'methods'             => WP_REST_Server::CREATABLE, // POST
-        'callback'            => 'pos_streaming_api_validate_coupon',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_validate_coupon',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
             'code' => array(
-                'required'          => true,
+                'description'       => __( 'Código del cupón a validar.', 'pos-base' ),
                 'type'              => 'string',
+                'required'          => true,
                 'sanitize_callback' => 'sanitize_text_field',
             ),
         ),
@@ -112,52 +210,67 @@ function pos_streaming_register_rest_routes() {
     // --- RUTA PARA CREAR PEDIDOS ---
     register_rest_route( $namespace, '/orders', array(
         'methods'             => WP_REST_Server::CREATABLE, // POST
-        'callback'            => 'pos_streaming_api_create_order',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_create_order',
+        'permission_callback' => 'pos_base_api_permissions_check',
         'args'                => array(
             'customer_id' => array(
+                'description'       => __( 'ID del cliente para el pedido.', 'pos-base' ),
+                'type'              => 'integer',
                 'required'          => true,
-                'validate_callback' => function($param) { return is_numeric($param) && $param > 0; },
                 'sanitize_callback' => 'absint',
+                'validate_callback' => function( $param ) { return is_numeric( $param ) && $param >= 0; }, // Permitir cliente invitado (ID 0)
+            ),
+            'line_items' => array(
+                'description'       => __( 'Array de productos en el carrito.', 'pos-base' ),
+                'type'              => 'array',
+                'required'          => true,
+                'items'             => array(
+                    'type'       => 'object',
+                    'properties' => array(
+                        'product_id' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint' ),
+                        'variation_id' => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+                        'quantity' => array( 'type' => 'integer', 'required' => true, 'sanitize_callback' => 'absint', 'validate_callback' => function($p){ return $p > 0; } ),
+                        'price' => array( 'type' => 'number', 'required' => true, /* sanitización/validación podría ser más compleja */ ),
+                    ),
+                ),
+                'validate_callback' => function( $param ) { return ! empty( $param ) && is_array( $param ); }, // Asegurar que no esté vacío
             ),
             'payment_method' => array(
-                'required'          => true,
+                'description'       => __( 'ID de la pasarela de pago.', 'pos-base' ),
                 'type'              => 'string',
+                'required'          => true,
                 'sanitize_callback' => 'sanitize_key',
             ),
-             'payment_method_title' => array( // Añadido para el título
+            'payment_method_title' => array(
+                'description'       => __( 'Título de la pasarela de pago (si es manual).', 'pos-base' ),
                 'type'              => 'string',
                 'sanitize_callback' => 'sanitize_text_field',
             ),
-            'line_items' => array(
-                'required'          => true,
-                'type'              => 'array',
-                'items'             => array('type' => 'object'),
-                    'validate_callback' => function($items) {
-                    if (!is_array($items) || empty($items)) return false;
-                    foreach ($items as $item) {
-                        if (empty($item['product_id']) || !isset($item['quantity']) || !isset($item['price'])) return false;
-                    }
-                    return true;
-                    }
-            ),
-            'meta_data' => array(
-                'type'              => 'array',
-                'items'             => array('type' => 'object'),
-            ),
-            'coupon_lines' => array(
-                'type'              => 'array',
-                'items'             => array('type' => 'object'),
-            ),
             'set_paid' => array(
+                'description'       => __( 'Marcar el pedido como pagado.', 'pos-base' ),
                 'type'              => 'boolean',
-                'sanitize_callback' => 'rest_sanitize_boolean',
                 'default'           => true,
+                'sanitize_callback' => 'rest_sanitize_boolean',
+            ),
+            'meta_data' => array( // Misma estructura que en cliente
+                'description'       => __( 'Metadatos adicionales del pedido (ej: tipo venta, suscripción).', 'pos-base' ),
+                'type'              => 'array',
+                'items'             => array( /* ... (igual que en create customer) ... */ ),
+            ),
+             'coupon_lines' => array(
+                'description'       => __( 'Array de cupones aplicados.', 'pos-base' ),
+                'type'              => 'array',
+                 'items'             => array(
+                    'type'       => 'object',
+                    'properties' => array(
+                        'code' => array( 'type' => 'string', 'required' => true, 'sanitize_callback' => 'sanitize_text_field' ),
+                    ),
+                ),
             ),
             'pos_order_note' => array(
-                'type'              => 'string',
-                'sanitize_callback' => 'sanitize_textarea_field', // Permite saltos de línea
-                'default'           => '',
+                 'description'       => __( 'Nota privada para el pedido añadida desde el POS.', 'pos-base' ),
+                 'type'              => 'string',
+                 'sanitize_callback' => 'sanitize_textarea_field',
             ),
         ),
     ) );
@@ -165,19 +278,59 @@ function pos_streaming_register_rest_routes() {
     // --- RUTA PARA OBTENER EVENTOS DEL CALENDARIO ---
     register_rest_route( $namespace, '/calendar-events', array(
         'methods'             => WP_REST_Server::READABLE, // GET
-        'callback'            => 'pos_streaming_api_get_calendar_events',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
+        'callback'            => 'pos_base_api_get_calendar_events',
+        'permission_callback' => 'pos_base_api_permissions_check',
+        // Podría tener args para 'start' y 'end' date si se implementa filtrado por fecha
     ) );
-    
+
     // --- RUTA PARA DATATABLES DE VENTAS ---
     register_rest_route( $namespace, '/sales-datatable', array(
         'methods'             => WP_REST_Server::READABLE, // GET
-        'callback'            => 'pos_streaming_api_get_sales_for_datatable',
-        'permission_callback' => 'pos_streaming_api_permissions_check',
-        // Los argumentos serán leídos directamente del request en el callback
+        'callback'            => 'pos_base_api_get_sales_for_datatable',
+        'permission_callback' => 'pos_base_api_permissions_check',
+        'args'                => array( // Argumentos estándar de DataTables Server-Side
+            'draw' => array(
+                'type'              => 'integer',
+                'sanitize_callback' => 'absint',
+                'required'          => true,
+            ),
+            'start' => array(
+                'type'              => 'integer',
+                'default'           => 0,
+                'sanitize_callback' => 'absint',
+            ),
+            'length' => array(
+                'type'              => 'integer',
+                'default'           => 10,
+                'sanitize_callback' => 'absint',
+                'validate_callback' => function($p){ return $p > 0 || $p === -1; }, // Permitir -1 para "todos"
+            ),
+            'search' => array(
+                'type'              => 'object', // O 'array' dependiendo de cómo lo envíe DT
+                'properties'        => array(
+                    'value' => array( 'type' => 'string', 'sanitize_callback' => 'sanitize_text_field' ),
+                    'regex' => array( 'type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean' ),
+                ),
+            ),
+             'order' => array(
+                'type'              => 'array',
+                 'items'             => array(
+                    'type'       => 'object',
+                    'properties' => array(
+                        'column' => array( 'type' => 'integer', 'sanitize_callback' => 'absint' ),
+                        'dir'    => array( 'type' => 'string', 'enum' => ['asc', 'desc'] ),
+                    ),
+                ),
+            ),
+            // Podrías añadir 'columns' si necesitas info específica de columnas
+        ),
     ) );
+
+    // --- Hook para que los MÓDULOS registren sus propias rutas ---
+    do_action( 'pos_base_register_module_rest_routes', $namespace );
+
 }
-add_action( 'rest_api_init', 'pos_streaming_register_rest_routes' );
+add_action( 'rest_api_init', 'pos_base_register_rest_routes' ); // <-- Asegúrate que esta línea existe al final del archivo
 
 // =========================================================================
 // 2. FUNCIONES CALLBACK DE LA API
@@ -185,41 +338,55 @@ add_action( 'rest_api_init', 'pos_streaming_register_rest_routes' );
 
 /**
  * Callback API: Buscar productos.
+ * Utiliza los parámetros validados de la solicitud para construir WP_Query.
  */
-function pos_streaming_api_search_products( WP_REST_Request $request ) {
+function pos_base_api_search_products( WP_REST_Request $request ) {
+    // Obtener parámetros validados y sanitizados por la definición de 'args' en register_rest_route
     $per_page = $request['per_page'];
     $page = $request['page'];
     $search_term = $request['search'];
-    $is_featured = $request['featured'];
+    $is_featured = $request['featured']; // Esto será true/false gracias a rest_sanitize_boolean
 
+    error_log('POS Base DEBUG: Entrando en pos_base_api_search_products. Search: "' . $search_term . '", Page: ' . $page . ', PerPage: ' . $per_page . ', Featured: ' . ($is_featured ? 'true' : 'false'));
+
+    // --- Construir los argumentos para WP_Query ---
     $args = array(
-        'post_type'      => array('product', 'product_variation'),
-        'post_status'    => 'publish',
-        'posts_per_page' => $per_page,
-        'paged'          => $page,
-        'orderby'        => 'title',
+        'post_type'      => 'product',       // Buscar solo productos
+        'post_status'    => 'publish',     // Solo productos publicados
+        'posts_per_page' => $per_page,      // Productos por página
+        'paged'          => $page,          // Página actual
+        'orderby'        => 'title',       // Ordenar por título por defecto
         'order'          => 'ASC',
+        // Ignorar productos pegajosos (sticky posts) si los hubiera
+        'ignore_sticky_posts' => 1,
     );
 
+    // Añadir término de búsqueda si existe
     if ( ! empty( $search_term ) ) {
-        $args['s'] = $search_term;
+        $args['s'] = $search_term; // 's' busca en título, contenido, extracto (y SKU si está configurado)
     }
 
-    if ( $is_featured ) {
-        $args['tax_query'] = array(
-            array(
-                'taxonomy' => 'product_visibility',
-                'field'    => 'name',
-                'terms'    => 'featured',
-            ),
+    // Añadir filtro para productos destacados si se solicitó Y no hay búsqueda
+    if ( $is_featured && empty( $search_term ) ) {
+        if ( ! isset( $args['tax_query'] ) ) {
+            $args['tax_query'] = array( 'relation' => 'AND' );
+        }
+        $args['tax_query'][] = array(
+            'taxonomy' => 'product_visibility',
+            'field'    => 'name',
+            'terms'    => 'featured',
+            'operator' => 'IN',
         );
-        $args['post_type'] = 'product';
-        $args['post_parent'] = 0;
     }
+    // --- Fin construcción de argumentos ---
 
+    error_log('POS Base DEBUG: WP_Query args: ' . print_r($args, true));
+
+    // Ejecutar la consulta
     $products_query = new WP_Query( $args );
     $products_data = array();
 
+    // Procesar resultados
     if ( $products_query->have_posts() ) {
         while ( $products_query->have_posts() ) {
             $products_query->the_post();
@@ -233,18 +400,22 @@ function pos_streaming_api_search_products( WP_REST_Request $request ) {
             $image_id = $product->get_image_id();
             $image_url = $image_id ? wp_get_attachment_image_url( $image_id, 'thumbnail' ) : wc_placeholder_img_src();
 
+            // Construir datos básicos del producto
             $product_item = array(
                 'id'          => $product->get_id(),
                 'name'        => $product->get_name(),
                 'sku'         => $product->get_sku(),
                 'price'       => $product->get_price(),
-                'price_html'  => $product->get_price_html(),
+                'regular_price' => $product->get_regular_price(),
+                'sale_price'  => $product->get_sale_price(),
                 'type'        => $product->get_type(),
                 'stock_status'=> $product->get_stock_status(),
+                'stock_quantity' => $product->get_stock_quantity(),
                 'image_url'   => $image_url,
-                'variations'  => array(),
+                'variations'  => array()
             );
 
+            // Si es un producto variable, obtener sus variaciones
             if ( $product->is_type( 'variable' ) ) {
                 $variations = $product->get_available_variations();
                 foreach ( $variations as $variation_data ) {
@@ -253,215 +424,291 @@ function pos_streaming_api_search_products( WP_REST_Request $request ) {
 
                     $variation_image_id = $variation_obj->get_image_id();
                     $variation_image_url = $variation_image_id ? wp_get_attachment_image_url( $variation_image_id, 'thumbnail' ) : $image_url;
+
                     $product_item['variations'][] = array(
-                        'variation_id'   => $variation_obj->get_id(),
-                        'variation_name' => wc_get_formatted_variation( $variation_obj, true, false ),
-                        'sku'            => $variation_obj->get_sku(),
-                        'price'          => $variation_obj->get_price(),
-                        'price_html'     => $variation_obj->get_price_html(),
-                        'stock_status'   => $variation_obj->get_stock_status(),
+                        'variation_id' => $variation_data['variation_id'],
+                        'attributes'   => $variation_data['attributes'],
+                        'display_price'=> $variation_data['display_price'],
+                        'display_regular_price' => $variation_data['display_regular_price'],
+                        'price'        => $variation_obj->get_price(),
+                        'regular_price'=> $variation_obj->get_regular_price(),
+                        'sale_price'   => $variation_obj->get_sale_price(),
+                        'sku'          => $variation_obj->get_sku(),
+                        'stock_status' => $variation_obj->get_stock_status(),
                         'stock_quantity' => $variation_obj->get_stock_quantity(),
-                        'image_url'      => $variation_image_url,
+                        'image_url'    => $variation_image_url,
+                        'is_in_stock'  => $variation_obj->is_in_stock(),
                     );
                 }
             }
             $products_data[] = $product_item;
         }
         wp_reset_postdata();
+    } else {
+        error_log('POS Base DEBUG: WP_Query no encontró productos.');
     }
 
+    // Preparar la respuesta REST
     $response = new WP_REST_Response( $products_data, 200 );
+
+    // Añadir cabeceras de paginación
     $total_products = $products_query->found_posts;
     $max_pages = $products_query->max_num_pages;
     $response->header( 'X-WP-Total', $total_products );
     $response->header( 'X-WP-TotalPages', $max_pages );
+
+    error_log('POS Base DEBUG: pos_base_api_search_products devolviendo ' . count($products_data) . ' productos.');
     return $response;
 }
 
 /**
  * Callback API: Buscar clientes.
  */
-function pos_streaming_api_search_customers( WP_REST_Request $request ) {
+function pos_base_api_search_customers( WP_REST_Request $request ) {
+    // Obtener parámetros validados
     $search_term = $request['search'];
     $per_page = $request['per_page'];
 
+    error_log('POS Base DEBUG: Entrando en pos_base_api_search_customers. Search: "' . $search_term . '", PerPage: ' . $per_page);
+
+    // --- Construir argumentos para WP_User_Query ---
     $args = array(
-        'role__in'    => array( 'customer' ),
-        'search'      => '*' . esc_attr( $search_term ) . '*',
-        'search_columns' => array( 'user_login', 'user_email', 'user_nicename', 'display_name' ),
-        'number'      => $per_page,
-        'orderby'     => 'display_name',
-        'order'       => 'ASC',
-        'meta_query'  => array(
+        'number' => $per_page, // Número de resultados
+        'search' => '*' . esc_attr( $search_term ) . '*', // Buscar en campos de usuario
+        'search_columns' => array( // Columnas donde buscar
+            'user_login',
+            'user_nicename',
+            'user_email',
+            'display_name',
+        ),
+        'meta_query' => array( // Buscar también en metadatos (nombre, apellido, teléfono)
             'relation' => 'OR',
-            array( 'key' => 'first_name', 'value' => $search_term, 'compare' => 'LIKE' ),
-            array( 'key' => 'last_name', 'value' => $search_term, 'compare' => 'LIKE' ),
-            array( 'key' => 'billing_phone', 'value' => $search_term, 'compare' => 'LIKE' )
-        )
+            array(
+                'key'     => 'first_name',
+                'value'   => $search_term,
+                'compare' => 'LIKE'
+            ),
+            array(
+                'key'     => 'last_name',
+                'value'   => $search_term,
+                'compare' => 'LIKE'
+            ),
+            array(
+                'key'     => 'billing_phone',
+                'value'   => $search_term,
+                'compare' => 'LIKE'
+            ),
+        ),
+        'orderby' => 'display_name', // Ordenar por nombre visible
+        'order' => 'ASC',
+        // Podríamos añadir 'role' => 'customer' si solo queremos clientes
     );
+    // --- Fin construcción argumentos ---
+
+    error_log('POS Base DEBUG: WP_User_Query args: ' . print_r($args, true));
 
     $user_query = new WP_User_Query( $args );
     $customers_data = array();
 
     if ( ! empty( $user_query->get_results() ) ) {
         foreach ( $user_query->get_results() as $user ) {
-            $customers_data[] = pos_streaming_prepare_customer_data_for_response( $user->ID );
+            // Usar función auxiliar para formatear la respuesta
+            $customers_data[] = pos_base_prepare_customer_data_for_response( $user->ID );
         }
+    } else {
+        error_log('POS Base DEBUG: WP_User_Query no encontró clientes.');
     }
 
+    error_log('POS Base DEBUG: pos_base_api_search_customers devolviendo ' . count($customers_data) . ' clientes.');
     return new WP_REST_Response( $customers_data, 200 );
 }
 
 /**
  * Callback API: Obtener un cliente específico.
  */
-function pos_streaming_api_get_customer( WP_REST_Request $request ) {
-    $customer_id = (int) $request['id'];
-    $user = get_user_by( 'id', $customer_id );
+function pos_base_api_get_customer( WP_REST_Request $request ) {
+    // El ID ya está validado como entero > 0 por 'args'
+    $customer_id = $request['id'];
 
+    error_log('POS Base DEBUG: Entrando en pos_base_api_get_customer. ID: ' . $customer_id);
+
+    $user = get_user_by( 'id', $customer_id );
     if ( ! $user ) {
-        return new WP_Error( 'rest_customer_invalid_id', __( 'Cliente no encontrado.', 'pos-streaming' ), array( 'status' => 404 ) );
+        error_log('POS Base DEBUG: Cliente ID ' . $customer_id . ' no encontrado.');
+        return new WP_Error( 'rest_customer_invalid_id', __( 'Cliente no encontrado.', 'pos-base' ), array( 'status' => 404 ) );
     }
 
-    $customer_data = pos_streaming_prepare_customer_data_for_response( $customer_id );
+    // Usar función auxiliar para formatear la respuesta
+    $customer_data = pos_base_prepare_customer_data_for_response( $customer_id );
+
+    if (empty($customer_data)) {
+         error_log('POS Base DEBUG: pos_base_prepare_customer_data_for_response devolvió vacío para ID ' . $customer_id);
+         return new WP_Error( 'rest_customer_data_error', __( 'No se pudieron obtener los datos del cliente.', 'pos-base' ), array( 'status' => 500 ) );
+    }
+
+    error_log('POS Base DEBUG: pos_base_api_get_customer devolviendo datos para ID ' . $customer_id);
     return new WP_REST_Response( $customer_data, 200 );
 }
 
 /**
  * Callback API: Crear un nuevo cliente.
  */
-function pos_streaming_api_create_customer( WP_REST_Request $request ) {
+function pos_base_api_create_customer( WP_REST_Request $request ) {
+    // Parámetros ya validados/sanitizados por 'args'
     $email = $request['email'];
     $first_name = $request['first_name'];
     $last_name = $request['last_name'];
     $phone = $request['phone'];
-    $meta_data = $request['meta_data']; // Array de objetos {key: '...', value: '...'}
+    $meta_data = $request['meta_data'] ?? []; // Asegurar que sea array
 
-    // Validaciones (sin cambios)
-    if ( ! empty( $email ) && ! is_email( $email ) ) {
-        return new WP_Error( 'rest_customer_invalid_email', __( 'La dirección de correo electrónico no es válida.', 'pos-streaming' ), array( 'status' => 400 ) );
-    }
+    error_log('POS Base DEBUG: Entrando en pos_base_api_create_customer. Email: ' . $email . ', Nombre: ' . $first_name);
+
+    // Validaciones adicionales (ej: email único si se proporciona)
     if ( ! empty( $email ) && email_exists( $email ) ) {
-        return new WP_Error( 'rest_customer_email_exists', __( 'Ya existe un cliente con esta dirección de correo electrónico.', 'pos-streaming' ), array( 'status' => 400 ) );
+        error_log('POS Base DEBUG: Error - Email ya existe: ' . $email);
+        return new WP_Error( 'rest_customer_email_exists', __( 'Ya existe un cliente con esta dirección de correo electrónico.', 'pos-base' ), array( 'status' => 400 ) );
     }
+
+    // Generar nombre de usuario y contraseña
     $username = ! empty( $email ) ? $email : sanitize_user( $first_name . $last_name . wp_rand( 100, 999 ), true );
-    if ( username_exists( $username ) ) {
-        $username .= wp_rand( 10, 99 );
-    }
+    if ( username_exists( $username ) ) $username .= wp_rand( 10, 99 );
     $password = wp_generate_password();
 
-    // Crear cliente WC (sin cambios)
+    // Crear cliente usando función de WooCommerce
     $customer_id = wc_create_new_customer( $email, $username, $password );
+
     if ( is_wp_error( $customer_id ) ) {
+        error_log('POS Base DEBUG: Error en wc_create_new_customer: ' . $customer_id->get_error_message());
         return new WP_Error( 'rest_customer_creation_failed', $customer_id->get_error_message(), array( 'status' => 500 ) );
     }
 
-    // Actualizar datos básicos (sin cambios)
+    error_log('POS Base DEBUG: Cliente creado con ID: ' . $customer_id);
+
+    // Actualizar datos básicos que wc_create_new_customer no maneja directamente
     wp_update_user( array( 'ID' => $customer_id, 'first_name' => $first_name, 'last_name' => $last_name ) );
-    if ( ! empty( $phone ) ) {
-        update_user_meta( $customer_id, 'billing_phone', $phone );
-    }
+    if ( ! empty( $phone ) ) update_user_meta( $customer_id, 'billing_phone', $phone );
 
-    // **MODIFICADO:** Guardar metadatos (avatar y nota)
-    if ( ! empty( $meta_data ) && is_array( $meta_data ) ) {
+    // Guardar metadatos personalizados (avatar y nota)
+    if ( ! empty( $meta_data ) ) {
         foreach ( $meta_data as $meta_item ) {
+            // Los 'key' y 'value' ya deberían estar sanitizados por 'args' si se definieron bien
             if ( isset( $meta_item['key'] ) && isset( $meta_item['value'] ) ) {
-                $key = sanitize_key( $meta_item['key'] );
-                $value = $meta_item['value']; // Sanitizar según la clave
-
+                $key = $meta_item['key']; // Ya sanitizado como 'sanitize_key'
+                $value = $meta_item['value']; // Sanitizar aquí si no se hizo en 'args'
                 if ( $key === 'pos_customer_avatar_id' ) {
-                    $avatar_id = absint( $value );
-                    if ( $avatar_id > 0 && 'attachment' === get_post_type( $avatar_id ) ) {
+                    $avatar_id = absint($value);
+                    if ($avatar_id > 0) {
                         update_user_meta( $customer_id, 'pos_customer_avatar_id', $avatar_id );
+                        error_log('POS Base DEBUG: Avatar ID ' . $avatar_id . ' guardado para cliente ' . $customer_id);
                     } else {
                         delete_user_meta( $customer_id, 'pos_customer_avatar_id' );
+                        error_log('POS Base DEBUG: Avatar eliminado para cliente ' . $customer_id);
                     }
-                } elseif ( $key === '_pos_customer_note' ) { // <-- GUARDAR NOTA
-                    update_user_meta( $customer_id, '_pos_customer_note', sanitize_textarea_field( $value ) );
+                } elseif ( $key === '_pos_customer_note' ) {
+                    update_user_meta( $customer_id, '_pos_customer_note', sanitize_textarea_field($value) );
+                    error_log('POS Base DEBUG: Nota guardada para cliente ' . $customer_id);
                 }
-                // Añadir más 'elseif' para otros metadatos si es necesario
             }
         }
     }
 
-    // Preparar y devolver respuesta (sin cambios)
-    $customer_data = pos_streaming_prepare_customer_data_for_response( $customer_id );
-    $response = new WP_REST_Response( $customer_data, 201 );
+    // Preparar y devolver respuesta
+    $customer_data = pos_base_prepare_customer_data_for_response( $customer_id );
+    $response = new WP_REST_Response( $customer_data, 201 ); // 201 Created
+    error_log('POS Base DEBUG: pos_base_api_create_customer completado para ID ' . $customer_id);
     return $response;
 }
 
 /**
  * Callback API: Actualizar un cliente existente.
  */
-function pos_streaming_api_update_customer( WP_REST_Request $request ) {
-    $customer_id = (int) $request['id'];
-    $user = get_user_by( 'id', $customer_id );
+function pos_base_api_update_customer( WP_REST_Request $request ) {
+    // ID validado por 'args'
+    $customer_id = $request['id'];
 
+    error_log('POS Base DEBUG: Entrando en pos_base_api_update_customer. ID: ' . $customer_id);
+
+    $user = get_user_by( 'id', $customer_id );
     if ( ! $user ) {
-        return new WP_Error( 'rest_customer_invalid_id', __( 'Cliente no encontrado para actualizar.', 'pos-streaming' ), array( 'status' => 404 ) );
+        error_log('POS Base DEBUG: Error - Cliente no encontrado para actualizar: ' . $customer_id);
+        return new WP_Error( 'rest_customer_invalid_id', __( 'Cliente no encontrado para actualizar.', 'pos-base' ), array( 'status' => 404 ) );
     }
 
     $update_data = array( 'ID' => $customer_id );
+    // Obtener todos los parámetros enviados (ya sanitizados por 'args')
     $params = $request->get_params();
 
-    // Campos principales (sin cambios)
+    // Campos principales (solo actualizar si se enviaron)
     if ( isset( $params['first_name'] ) ) $update_data['first_name'] = $params['first_name'];
     if ( isset( $params['last_name'] ) ) $update_data['last_name'] = $params['last_name'];
     if ( isset( $params['email'] ) ) {
-        $email = $params['email'];
-        if ( ! empty( $email ) && ! is_email( $email ) ) {
-            return new WP_Error( 'rest_customer_invalid_email', __( 'La dirección de correo electrónico no es válida.', 'pos-streaming' ), array( 'status' => 400 ) );
-        }
-        $existing_user = email_exists( $email );
-        if ( $existing_user && $existing_user !== $customer_id ) {
-            return new WP_Error( 'rest_customer_email_exists', __( 'Ya existe otro cliente con esta dirección de correo electrónico.', 'pos-streaming' ), array( 'status' => 400 ) );
+        $email = $params['email']; // Ya sanitizado
+        // Validar unicidad si el email cambió
+        if ( $email !== $user->user_email ) {
+            $existing_user = email_exists( $email );
+            if ( $existing_user && $existing_user !== $customer_id ) {
+                 error_log('POS Base DEBUG: Error - Email ' . $email . ' ya existe para otro usuario.');
+                return new WP_Error( 'rest_customer_email_exists', __( 'Ya existe otro cliente con esta dirección de correo electrónico.', 'pos-base' ), array( 'status' => 400 ) );
+            }
         }
         $update_data['user_email'] = $email;
     }
-    $result = wp_update_user( $update_data );
-    if ( is_wp_error( $result ) ) {
-        return new WP_Error( 'rest_customer_update_failed', $result->get_error_message(), array( 'status' => 500 ) );
+
+    // Actualizar datos del usuario
+    if (count($update_data) > 1) { // Solo si hay algo más que el ID
+        $result = wp_update_user( $update_data );
+        if ( is_wp_error( $result ) ) {
+            error_log('POS Base DEBUG: Error en wp_update_user para ID ' . $customer_id . ': ' . $result->get_error_message());
+            return new WP_Error( 'rest_customer_update_failed', $result->get_error_message(), array( 'status' => 500 ) );
+        }
+         error_log('POS Base DEBUG: Datos de usuario actualizados para ID ' . $customer_id . ': ' . print_r($update_data, true));
     }
 
-    // Teléfono (sin cambios)
+
+    // Teléfono (actualizar meta si se envió)
     if ( isset( $params['phone'] ) ) {
-        update_user_meta( $customer_id, 'billing_phone', $params['phone'] );
+        update_user_meta( $customer_id, 'billing_phone', $params['phone'] ); // Ya sanitizado
+        error_log('POS Base DEBUG: Teléfono actualizado para ID ' . $customer_id);
     }
 
-    // **MODIFICADO:** Actualizar metadatos (avatar y nota)
+    // Actualizar metadatos personalizados (avatar y nota)
     if ( isset( $params['meta_data'] ) && is_array( $params['meta_data'] ) ) {
         foreach ( $params['meta_data'] as $meta_item ) {
              if ( isset( $meta_item['key'] ) && isset( $meta_item['value'] ) ) {
-                $key = sanitize_key( $meta_item['key'] );
-                $value = $meta_item['value']; // Sanitizar según la clave
-
+                $key = $meta_item['key']; // Ya sanitizado
+                $value = $meta_item['value']; // Sanitizar aquí si no se hizo en 'args'
                 if ( $key === 'pos_customer_avatar_id' ) {
-                    $avatar_id = absint( $value );
-                    if ( $avatar_id > 0 && 'attachment' === get_post_type( $avatar_id ) ) {
+                    $avatar_id = absint($value);
+                     if ($avatar_id > 0) {
                         update_user_meta( $customer_id, 'pos_customer_avatar_id', $avatar_id );
+                        error_log('POS Base DEBUG: Avatar ID ' . $avatar_id . ' actualizado para cliente ' . $customer_id);
                     } else {
                         delete_user_meta( $customer_id, 'pos_customer_avatar_id' );
+                        error_log('POS Base DEBUG: Avatar eliminado para cliente ' . $customer_id);
                     }
-                } elseif ( $key === '_pos_customer_note' ) { // <-- GUARDAR NOTA
-                    update_user_meta( $customer_id, '_pos_customer_note', sanitize_textarea_field( $value ) );
+                } elseif ( $key === '_pos_customer_note' ) {
+                    update_user_meta( $customer_id, '_pos_customer_note', sanitize_textarea_field($value) );
+                    error_log('POS Base DEBUG: Nota actualizada para cliente ' . $customer_id);
                 }
-                 // Añadir más 'elseif' para otros metadatos si es necesario
             }
         }
     }
 
-    // Preparar y devolver respuesta (sin cambios)
-    $customer_data = pos_streaming_prepare_customer_data_for_response( $customer_id );
-    return new WP_REST_Response( $customer_data, 200 );
+    // Preparar y devolver respuesta
+    $customer_data = pos_base_prepare_customer_data_for_response( $customer_id );
+    error_log('POS Base DEBUG: pos_base_api_update_customer completado para ID ' . $customer_id);
+    return new WP_REST_Response( $customer_data, 200 ); // 200 OK
 }
 
 /**
- * Callback API: Obtener las pasarelas de pago activas.
+ * Callback API: Obtener las pasarelas de pago activas y añadir opción manual POS.
  */
-function pos_streaming_api_get_payment_gateways( WP_REST_Request $request ) {
+function pos_base_api_get_payment_gateways( WP_REST_Request $request ) {
+    error_log('POS Base DEBUG: Entrando en pos_base_api_get_payment_gateways.');
     $gateways_data = array();
     $available_gateways = WC()->payment_gateways->get_available_payment_gateways();
 
+    // Añadir pasarelas activas de WooCommerce
     if ( $available_gateways ) {
         foreach ( $available_gateways as $gateway ) {
             if ( $gateway->enabled === 'yes' ) {
@@ -469,417 +716,456 @@ function pos_streaming_api_get_payment_gateways( WP_REST_Request $request ) {
             }
         }
     }
-    $has_cash_option = false;
-    foreach ($gateways_data as $gw) {
-        if (in_array($gw['id'], ['cod', 'bacs', 'cheque', 'pos_cash'])) {
-            $has_cash_option = true; break;
-        }
-    }
-    if (!$has_cash_option) {
-         $gateways_data[] = array( 'id' => 'pos_manual', 'title' => __('Efectivo / Manual (POS)', 'pos-streaming') );
-    }
+
+    // SIEMPRE añadir la opción manual para el POS
+    $gateways_data[] = array( 'id' => 'pos_manual', 'title' => __('Efectivo / Manual (POS)', 'pos-base') );
+
+    // Opcional: Eliminar duplicados si 'pos_manual' ya existiera por alguna razón
+    $gateways_data = array_values(array_unique($gateways_data, SORT_REGULAR)); // array_values para reindexar
+
+    error_log('POS Base DEBUG: pos_base_api_get_payment_gateways devolviendo: ' . print_r($gateways_data, true));
     return new WP_REST_Response( $gateways_data, 200 );
 }
 
 /**
  * Callback API: Validar un código de cupón.
  */
-function pos_streaming_api_validate_coupon( WP_REST_Request $request ) {
-    if ( ! wc_coupons_enabled() ) {
-        return new WP_Error( 'rest_coupons_disabled', __( 'Los cupones están deshabilitados.', 'pos-streaming' ), array( 'status' => 400 ) );
-    }
+function pos_base_api_validate_coupon( WP_REST_Request $request ) {
+    // Código ya validado/sanitizado por 'args'
     $coupon_code = $request['code'];
-    if ( empty( $coupon_code ) ) {
-         return new WP_Error( 'rest_coupon_code_required', __( 'El código de cupón es requerido.', 'pos-streaming' ), array( 'status' => 400 ) );
+
+    error_log('POS Base DEBUG: Entrando en pos_base_api_validate_coupon. Code: ' . $coupon_code);
+
+    if ( ! wc_coupons_enabled() ) {
+        error_log('POS Base DEBUG: Error - Cupones deshabilitados.');
+        return new WP_Error( 'rest_coupons_disabled', __( 'Los cupones están deshabilitados.', 'pos-base' ), array( 'status' => 400 ) );
     }
+
     $coupon = new WC_Coupon( $coupon_code );
+
     if ( ! $coupon->get_id() ) {
-        return new WP_Error( 'rest_coupon_invalid_code', sprintf( __( 'El cupón "%s" no existe.', 'pos-streaming' ), $coupon_code ), array( 'status' => 404 ) );
+        error_log('POS Base DEBUG: Error - Cupón no existe: ' . $coupon_code);
+        return new WP_Error( 'rest_coupon_invalid_code', sprintf( __( 'El cupón "%s" no existe.', 'pos-base' ), $coupon_code ), array( 'status' => 404 ) );
     }
+
+    // Validar el cupón (considerando el carrito si fuera necesario, aunque aquí no tenemos carrito)
     $is_valid = $coupon->is_valid();
+
     if ( ! $is_valid ) {
         $error_message = '';
+        // Intentar obtener un mensaje de error más específico si es posible
+        // Nota: validate_coupon_usage necesita un objeto WC_Cart, que no tenemos aquí.
+        // La validación básica de is_valid() suele cubrir fechas, límites de uso, etc.
+        // Si necesitamos validar contra productos específicos, se complica.
         try {
-            $validation_error = $coupon->validate_coupon_usage( WC()->cart ); // Simular carrito vacío
-            if (is_wp_error($validation_error)) $error_message = $validation_error->get_error_message();
+            // Simulación simple de validación (podría no ser suficiente para todas las reglas)
+            if ( $coupon->get_date_expires() && $coupon->get_date_expires()->get_timestamp() < time() ) {
+                $error_message = __( 'Este cupón ha expirado.', 'pos-base' );
+            } elseif ( $coupon->get_usage_limit() > 0 && $coupon->get_usage_count() >= $coupon->get_usage_limit() ) {
+                 $error_message = __( 'Se ha alcanzado el límite de usos para este cupón.', 'pos-base' );
+            }
+            // Añadir más validaciones si es necesario (ej: minimum_amount)
         } catch (Exception $e) { $error_message = $e->getMessage(); }
-        if (empty($error_message)) $error_message = sprintf( __( 'El cupón "%s" no es válido.', 'pos-streaming' ), $coupon_code );
+
+        if (empty($error_message)) $error_message = sprintf( __( 'El cupón "%s" no es válido.', 'pos-base' ), $coupon_code );
+
+        error_log('POS Base DEBUG: Error - Cupón inválido: ' . $coupon_code . ' - Razón: ' . $error_message);
         return new WP_Error( 'rest_coupon_invalid', $error_message, array( 'status' => 400 ) );
     }
+
+    // --- Construir datos del cupón para la respuesta ---
     $coupon_data = array(
-        'id'            => $coupon->get_id(),
-        'code'          => $coupon->get_code(),
-        'amount'        => wc_format_decimal( $coupon->get_amount(), wc_get_price_decimals() ),
-        'discount_type' => $coupon->get_discount_type(),
+        'id'                          => $coupon->get_id(),
+        'code'                        => $coupon->get_code(),
+        'amount'                      => wc_format_decimal( $coupon->get_amount(), wc_get_price_decimals() ), // Valor numérico
+        'discount_type'               => $coupon->get_discount_type(), // 'fixed_cart', 'percent', 'fixed_product'
+        'description'                 => $coupon->get_description(),
+        'date_expires'                => $coupon->get_date_expires() ? $coupon->get_date_expires()->date( 'Y-m-d H:i:s' ) : null,
+        'minimum_amount'              => wc_format_decimal( $coupon->get_minimum_amount(), wc_get_price_decimals() ),
+        'maximum_amount'              => wc_format_decimal( $coupon->get_maximum_amount(), wc_get_price_decimals() ),
+        'individual_use'              => $coupon->get_individual_use(),
+        'exclude_sale_items'          => $coupon->get_exclude_sale_items(),
+        'free_shipping'               => $coupon->get_free_shipping(),
+        // Podríamos añadir product_ids, excluded_product_ids, etc. si son necesarios
     );
+    // --- Fin construcción datos ---
+
+    error_log('POS Base DEBUG: Cupón validado correctamente: ' . $coupon_code);
     return new WP_REST_Response( $coupon_data, 200 );
 }
 
 /**
  * Callback API: Crear un pedido.
  */
-function pos_streaming_api_create_order( WP_REST_Request $request ) {
-    $params = $request->get_json_params();
-    // error_log("POS API: create_order - Parámetros recibidos: " . print_r($params, true));
-
-    // Validación básica (sin cambios)
-    if ( empty( $params['customer_id'] ) || empty( $params['line_items'] ) || empty( $params['payment_method'] ) ) {
-        return new WP_Error( 'rest_missing_params', __( 'Faltan parámetros requeridos.', 'pos-streaming' ), array( 'status' => 400 ) );
-    }
-
-    $customer_id = absint( $params['customer_id'] );
+function pos_base_api_create_order( WP_REST_Request $request ) {
+    // Parámetros ya validados/sanitizados por 'args'
+    $params = $request->get_params(); // Usar get_params() ya que 'args' los procesa
+    $customer_id = $params['customer_id'];
     $line_items_data = $params['line_items'];
-    $payment_method_id = sanitize_key( $params['payment_method'] );
-    $payment_method_title = isset($params['payment_method_title']) ? sanitize_text_field($params['payment_method_title']) : $payment_method_id;
-    $set_paid = isset( $params['set_paid'] ) ? (bool) $params['set_paid'] : true;
-    $meta_data_input = isset( $params['meta_data'] ) ? $params['meta_data'] : array();
-    $coupon_lines_input = isset( $params['coupon_lines'] ) ? $params['coupon_lines'] : array();
+    $payment_method_id = $params['payment_method'];
+    $payment_method_title = $params['payment_method_title'] ?? $payment_method_id; // Usar título si se envió
+    $set_paid = $params['set_paid']; // Ya es booleano por 'args'
+    $meta_data_input = $params['meta_data'] ?? [];
+    $coupon_lines_input = $params['coupon_lines'] ?? [];
+    $pos_order_note = $params['pos_order_note'] ?? ''; // Ya sanitizado
 
-    // Verificar cliente (sin cambios)
-    $customer = get_user_by( 'id', $customer_id );
-    if ( ! $customer ) {
-         return new WP_Error( 'rest_invalid_customer', __( 'El cliente no existe.', 'pos-streaming' ), array( 'status' => 400 ) );
+    error_log('POS Base DEBUG: Entrando en pos_base_api_create_order. Cliente ID: ' . $customer_id);
+
+    // Validar cliente (aunque ID 0 es permitido por 'args')
+    if ($customer_id > 0) {
+        $customer = get_user_by( 'id', $customer_id );
+        if ( ! $customer ) {
+             error_log('POS Base DEBUG: Error - Cliente ID ' . $customer_id . ' no existe.');
+             return new WP_Error( 'rest_invalid_customer', __( 'El cliente no existe.', 'pos-base' ), array( 'status' => 400 ) );
+        }
     }
 
-    // --- Crear el Pedido ---
     $order = null;
     try {
-        $order = wc_create_order( array(
-            'customer_id' => $customer_id,
-            'status'      => 'wc-pending', // Empezar como pendiente
-        ) );
-
-        if ( is_wp_error( $order ) ) throw new Exception( $order->get_error_message() );
+        // Crear el pedido con estado pendiente inicial
+        $order = wc_create_order( array( 'customer_id' => $customer_id, 'status' => 'wc-pending' ) );
+        if ( is_wp_error( $order ) ) {
+            throw new Exception( $order->get_error_message() );
+        }
         $order_id = $order->get_id();
-        // error_log("POS API: create_order - Pedido {$order_id} iniciado.");
+        error_log('POS Base DEBUG: Pedido creado con ID: ' . $order_id);
 
-        // **NUEVO:** Establecer datos de facturación del pedido
-        $billing_details = array(
-            'first_name' => $customer->first_name,
-            'last_name'  => $customer->last_name,
-            'email'      => $customer->user_email,
-            'phone'      => get_user_meta( $customer_id, 'billing_phone', true ),
-            // Podrías añadir dirección, ciudad, etc., si los recopilas
-            // 'address_1'  => get_user_meta( $customer_id, 'billing_address_1', true ),
-            // 'city'       => get_user_meta( $customer_id, 'billing_city', true ),
-            // 'postcode'   => get_user_meta( $customer_id, 'billing_postcode', true ),
-            // 'country'    => get_user_meta( $customer_id, 'billing_country', true ),
-            // 'state'      => get_user_meta( $customer_id, 'billing_state', true ),
-        );
+        // --- Establecer datos de facturación desde el cliente (si existe) ---
+        $billing_details = array();
+        if ($customer_id > 0 && $customer) {
+            $billing_details = array(
+                'first_name' => $customer->first_name ?: $customer->display_name,
+                'last_name'  => $customer->last_name,
+                'email'      => $customer->user_email,
+                'phone'      => get_user_meta( $customer_id, 'billing_phone', true ),
+                // Añadir más campos si son necesarios (address, city, etc.)
+                // 'address_1'  => get_user_meta( $customer_id, 'billing_address_1', true ),
+                // 'city'       => get_user_meta( $customer_id, 'billing_city', true ),
+                // 'postcode'   => get_user_meta( $customer_id, 'billing_postcode', true ),
+                // 'country'    => get_user_meta( $customer_id, 'billing_country', true ),
+                // 'state'      => get_user_meta( $customer_id, 'billing_state', true ),
+            );
+        } else {
+             // Datos para cliente invitado (ID 0) - Podrían venir en la petición si se implementa
+             $billing_details = array(
+                 'first_name' => __('Invitado', 'pos-base'),
+                 'last_name' => 'POS',
+             );
+        }
         $order->set_address( $billing_details, 'billing' );
-        // error_log("POS API: create_order - Pedido {$order_id}: Datos de facturación establecidos.");
-        // ----------------------------------------------------
+        // Podríamos añadir dirección de envío si fuera diferente
+        // $order->set_address( $shipping_details, 'shipping' );
+        // --- Fin datos facturación ---
 
-            // ... (Obtener otros parámetros: customer_id, line_items, etc.) ...
-            $pos_order_note = isset( $params['pos_order_note'] ) ? $params['pos_order_note'] : ''; // Obtener la nota
-        
-        
-            // Añadir nota automática del POS
-            $order->add_order_note( __( 'Pedido creado desde POS Streaming.', 'pos-streaming' ), false ); // false = Nota privada
-        
-            // Añadir la nota personalizada si existe
-            if ( ! empty( $pos_order_note ) ) {
-                // Añadir como nota PRIVADA (solo visible en admin)
-                $order->add_order_note( $pos_order_note, true );
-                // Si quisieras que fuera una NOTA AL CLIENTE (visible por él y enviada por email):
-                // $order->add_order_note( $pos_order_note, true );
-            }
-    
+        // Añadir nota automática del POS
+        $order->add_order_note( __( 'Pedido creado desde POS Base.', 'pos-base' ), false, true ); // Nota pública
+
+        // Añadir la nota personalizada si existe
+        if ( ! empty( $pos_order_note ) ) {
+            $order->add_order_note( $pos_order_note, true, true ); // Nota privada para el cliente
+            error_log('POS Base DEBUG: Nota privada añadida al pedido ' . $order_id);
+        }
+
         // --- Añadir Items y Precio Personalizado ---
         $pos_calculated_subtotal = 0;
         foreach ( $line_items_data as $item_data ) {
-            $product_id = absint( $item_data['product_id'] );
-            $variation_id = isset( $item_data['variation_id'] ) ? absint( $item_data['variation_id'] ) : 0;
-            $quantity = absint( $item_data['quantity'] );
-            $custom_unit_price = isset( $item_data['price'] ) ? floatval( $item_data['price'] ) : null;
+            // Datos ya validados/sanitizados por 'args'
+            $product_id = $item_data['product_id'];
+            $variation_id = $item_data['variation_id'] ?? 0;
+            $quantity = $item_data['quantity'];
+            $custom_unit_price = $item_data['price']; // Ya es 'number'
 
-            if ($custom_unit_price === null || $custom_unit_price < 0) throw new Exception( sprintf( __( 'Precio inválido para producto ID %d.', 'pos-streaming' ), $variation_id ?: $product_id ) );
             $product = wc_get_product( $variation_id ?: $product_id );
-            if ( ! $product ) throw new Exception( sprintf( __( 'Producto inválido ID %d.', 'pos-streaming' ), $variation_id ?: $product_id ) );
+            if ( ! $product ) {
+                throw new Exception( sprintf( __( 'Producto inválido ID %d.', 'pos-base' ), $variation_id ?: $product_id ) );
+            }
 
+            // Añadir producto al pedido
             $item_id = $order->add_product( $product, $quantity );
-            if (!$item_id) throw new Exception( sprintf( __( 'No se pudo añadir producto ID %d.', 'pos-streaming' ), $variation_id ?: $product_id ) );
-            $item = $order->get_item( $item_id );
-            if ( ! $item instanceof WC_Order_Item_Product ) throw new Exception( sprintf( __( 'No se pudo obtener item %d.', 'pos-streaming' ), $item_id ) );
+            if (!$item_id) {
+                throw new Exception( sprintf( __( 'No se pudo añadir producto ID %d al pedido.', 'pos-base' ), $variation_id ?: $product_id ) );
+            }
 
+            // Obtener el item recién añadido para modificarlo
+            $item = $order->get_item( $item_id );
+            if ( ! $item instanceof WC_Order_Item_Product ) {
+                throw new Exception( sprintf( __( 'No se pudo obtener el item %d del pedido.', 'pos-base' ), $item_id ) );
+            }
+
+            // Establecer el precio personalizado
             $line_subtotal = $custom_unit_price * $quantity;
-            $line_total = $custom_unit_price * $quantity;
+            $line_total = $custom_unit_price * $quantity; // Asumimos que no hay impuestos calculados aquí
             $pos_calculated_subtotal += $line_total;
 
             $item->set_subtotal( $line_subtotal );
             $item->set_total( $line_total );
-            $item->save();
-            // error_log("POS API: create_order - Pedido {$order_id}, Item {$item_id}: Total {$line_total} guardado.");
+            // Podríamos añadir metadatos al item si fuera necesario
+            // $item->add_meta_data( '_pos_original_price', $product->get_price() );
+            $item->save(); // Guardar cambios en el item
+            error_log('POS Base DEBUG: Item añadido/actualizado en pedido ' . $order_id . ': Product ID ' . ($variation_id ?: $product_id) . ', Qty: ' . $quantity . ', Price: ' . $custom_unit_price);
         }
+        // --- Fin añadir items ---
 
-        // --- Método de Pago ---
+        // Método de Pago
         $payment_gateways = WC()->payment_gateways->payment_gateways();
         if ( isset( $payment_gateways[ $payment_method_id ] ) ) {
-            $order->set_payment_method( $payment_gateways[ $payment_method_id ] );
+            $order->set_payment_method( $payment_gateways[ $payment_method_id ] ); // Usa el objeto pasarela si existe
         } else {
-             $order->set_payment_method( $payment_method_id );
-             $order->set_payment_method_title( $payment_method_title );
+            // Si es un método manual o no reconocido por WC, guardar ID y título
+            $order->set_payment_method( $payment_method_id );
+            $order->set_payment_method_title( $payment_method_title );
         }
-        // error_log("POS API: create_order - Pedido {$order_id}: Método pago {$payment_method_id}.");
+        error_log('POS Base DEBUG: Método de pago establecido para pedido ' . $order_id . ': ' . $payment_method_id);
 
-        // --- Metadatos ---
+        // --- Metadatos del Pedido (incluye los de suscripción base) ---
         if ( ! empty( $meta_data_input ) ) {
             foreach ( $meta_data_input as $meta_item ) {
+                // Key/Value ya sanitizados por 'args'
                 if ( isset( $meta_item['key'] ) && isset( $meta_item['value'] ) ) {
-                    $order->update_meta_data( sanitize_key( $meta_item['key'] ), wp_kses_post( $meta_item['value'] ) );
+                    $order->update_meta_data( $meta_item['key'], $meta_item['value'] );
+                    error_log('POS Base DEBUG: Metadato añadido/actualizado en pedido ' . $order_id . ': ' . $meta_item['key'] . ' = ' . print_r($meta_item['value'], true));
                 }
             }
         }
-        $order->add_order_note( __( 'Pedido creado desde POS Streaming.', 'pos-streaming' ) );
+        // --- Fin metadatos ---
 
-        // --- Guardar pedido TEMPRANO ---
+        // Guardar pedido TEMPRANO para poder aplicar cupones
         $order->save();
-        // error_log("POS API: create_order - Pedido {$order_id}: Guardado (1ra vez).");
 
-        // --- Cupones ---
+        // --- Aplicar Cupones ---
         $coupon_discount_total = 0;
         if ( ! empty( $coupon_lines_input ) ) {
+            error_log('POS Base DEBUG: Aplicando cupones al pedido ' . $order_id . ': ' . print_r($coupon_lines_input, true));
             foreach ( $coupon_lines_input as $coupon_line ) {
                 if ( ! empty( $coupon_line['code'] ) ) {
-                    $result = $order->apply_coupon( sanitize_text_field( $coupon_line['code'] ) );
-                    // if ( is_wp_error( $result ) ) error_log("POS API: create_order - Pedido {$order_id}: Error cupón {$coupon_line['code']}: " . $result->get_error_message());
+                    $result = $order->apply_coupon( $coupon_line['code'] ); // Código ya sanitizado
+                    if (is_wp_error($result)) {
+                         error_log('POS Base DEBUG: Error al aplicar cupón ' . $coupon_line['code'] . ': ' . $result->get_error_message());
+                         // Podríamos lanzar una excepción o añadir una nota al pedido
+                    } else {
+                         error_log('POS Base DEBUG: Cupón ' . $coupon_line['code'] . ' aplicado correctamente.');
+                    }
                 }
             }
-            $order->calculate_totals(false);
+            // Recalcular totales DESPUÉS de aplicar cupones
+            $order->calculate_totals(false); // false para no recalcular impuestos si no los manejamos
             $coupon_discount_total = $order->get_discount_total();
-            // error_log("POS API: create_order - Pedido {$order_id}: Descuento cupones: {$coupon_discount_total}");
+            error_log('POS Base DEBUG: Descuento total por cupones: ' . $coupon_discount_total);
         }
+        // --- Fin cupones ---
 
-        // --- Calcular y Forzar Total Final ---
+        // Calcular y Forzar Total Final (Subtotal POS - Descuento Cupón)
+        // Esto ignora impuestos y envío calculados por WC, forzando el total del POS
         $final_total = max(0, $pos_calculated_subtotal - $coupon_discount_total);
         $order->set_total( $final_total );
-        // error_log("POS API: create_order - Pedido {$order_id}: Total forzado a {$final_total}");
+        error_log('POS Base DEBUG: Total final calculado y forzado para pedido ' . $order_id . ': ' . $final_total);
 
-        // --- Estado Final y Pago ---
-        $final_status = 'completed'; // O 'processing' si prefieres
-        $order->update_status( $final_status, __( 'Pedido completado desde POS.', 'pos-streaming' ), false );
+        // Estado Final y Pago
+        // Usar 'completed' directamente para ventas POS, a menos que sea a crédito
+        $sale_type = $order->get_meta('_pos_sale_type'); // Leer el meta que acabamos de guardar
+        $final_status = ($sale_type === 'credit') ? 'on-hold' : 'completed'; // Ejemplo: 'on-hold' para crédito
 
-        if ( $set_paid && $order->get_total() > 0 ) {
-            $order->payment_complete();
-            // error_log("POS API: create_order - Pedido {$order_id}: Marcado pagado.");
-        } elseif ($order->get_total() == 0) {
-             $order->payment_complete(); // Marcar pagado si es gratis
-             // error_log("POS API: create_order - Pedido {$order_id} (gratis): Marcado pagado.");
+        $order->update_status( $final_status, __( 'Pedido procesado desde POS.', 'pos-base' ), false ); // No notificar al cliente por defecto
+        error_log('POS Base DEBUG: Estado del pedido ' . $order_id . ' actualizado a: ' . $final_status);
+
+        // Marcar como pagado si corresponde
+        if ( $set_paid && $final_status === 'completed' ) {
+            if ($order->get_total() > 0) {
+                $order->payment_complete();
+                error_log('POS Base DEBUG: Pedido ' . $order_id . ' marcado como pagado (payment_complete).');
+            } elseif ($order->get_total() == 0) {
+                 // Para pedidos gratuitos, payment_complete puede no cambiar el estado si ya es 'completed'
+                 $order->set_date_paid( time() ); // Marcar fecha de pago manualmente
+                 $order->save();
+                 error_log('POS Base DEBUG: Pedido gratuito ' . $order_id . ' marcado como pagado (manualmente).');
+            }
         } else {
-            $order->save(); // Guardar si no se marcó como pagado
-            // error_log("POS API: create_order - Pedido {$order_id}: Guardado final (no pagado).");
+            $order->save(); // Guardar cualquier cambio final
         }
 
-        // Preparar Respuesta (sin cambios)
-        $response_data = array( 'id' => $order->get_id(), 'status' => $order->get_status(), 'total' => $order->get_total() );
-        return new WP_REST_Response( $response_data, 201 );
+        // Preparar Respuesta
+        $response_data = array(
+            'id' => $order->get_id(),
+            'status' => $order->get_status(),
+            'total' => $order->get_total(),
+            'order_url' => $order->get_edit_order_url(), // Añadir URL para conveniencia
+        );
+        error_log('POS Base DEBUG: pos_base_api_create_order completado. Respuesta: ' . print_r($response_data, true));
+        return new WP_REST_Response( $response_data, 201 ); // 201 Created
 
     } catch ( Exception $e ) {
-        // error_log("POS API: create_order - *** EXCEPCIÓN ***: " . $e->getMessage());
+        error_log('POS Base DEBUG: EXCEPCIÓN al crear pedido: ' . $e->getMessage());
+        // Intentar eliminar el pedido parcialmente creado si falló
         if ( isset( $order ) && $order instanceof WC_Order && $order->get_id() > 0 ) {
-             wp_delete_post( $order->get_id(), true ); // Limpiar pedido fallido
+            wp_delete_post( $order->get_id(), true );
+            error_log('POS Base DEBUG: Pedido parcialmente creado ' . $order->get_id() . ' eliminado debido a error.');
         }
         return new WP_Error( 'rest_order_creation_failed', $e->getMessage(), array( 'status' => 500 ) );
     }
 }
 
 /**
- * Callback API: Obtener eventos para FullCalendar.
- * MODIFICADO: Incluye vencimientos de perfiles Y vencimientos de cuentas.
+ * Callback API: Obtener eventos para FullCalendar (Solo Vencimientos de Suscripciones Base).
  */
-function pos_streaming_api_get_calendar_events( WP_REST_Request $request ) {
-    $all_events = array(); // Array para todos los eventos
+function pos_base_api_get_calendar_events( WP_REST_Request $request ) {
+    error_log('POS Base DEBUG: Entrando en pos_base_api_get_calendar_events.');
+    $subscription_events = array();
 
-    // --- 1. Obtener Vencimientos de Perfiles (Suscripciones Vendidas) ---
-    $profile_args = array(
-        'post_type'  => 'pos_profile', // Buscar perfiles
-        'post_status'=> 'any', // Considerar cualquier estado de perfil
-        'limit'      => -1,
-        'meta_query' => array(
+    // --- Obtener Vencimientos de Suscripciones Vendidas (desde Pedidos) ---
+    $order_args = array(
+        'post_type'   => 'shop_order',
+        'post_status' => 'any', // Usar estados válidos
+        'limit'       => -1, // Sin límite
+        'meta_query'  => array(
             'relation' => 'AND',
-            // Que esté asignado a un pedido
-            array( 'key' => '_pos_assigned_order_id', 'compare' => 'EXISTS' ),
-            array( 'key' => '_pos_assigned_order_id', 'value' => '0', 'compare' => '!=' ),
-            array( 'key' => '_pos_assigned_order_id', 'value' => '', 'compare' => '!=' ),
-            // Y que tenga una fecha de expiración de suscripción válida
+            array( 'key' => '_pos_sale_type', 'value' => 'subscription', 'compare' => '=' ),
             array( 'key' => '_pos_subscription_expiry_date', 'compare' => 'EXISTS' ),
             array( 'key' => '_pos_subscription_expiry_date', 'value' => '', 'compare' => '!=' ),
-            // Podríamos añadir filtro por estado del pedido asociado si quisiéramos
+            // Podríamos añadir filtro por fecha si 'start' y 'end' se pasan en $request
         ),
-        'orderby'    => 'meta_value', // Ordenar por fecha de expiración
-        'meta_key'   => '_pos_subscription_expiry_date',
-        'order'      => 'ASC',
+        'orderby'     => 'meta_value',
+        'meta_key'    => '_pos_subscription_expiry_date',
+        'order'       => 'ASC',
+        'return'      => 'ids',
     );
 
-    // Usar WP_Query para CPTs
-    $profile_query = new WP_Query( $profile_args );
+    $order_ids = wc_get_orders( $order_args );
 
-    if ( $profile_query->have_posts() ) {
-        while ( $profile_query->have_posts() ) {
-            $profile_query->the_post();
-            $profile_id = get_the_ID();
-            $order_id = get_post_meta( $profile_id, '_pos_assigned_order_id', true );
-            $order = wc_get_order($order_id); // Necesitamos el pedido para obtener el título/color
+    if ( ! empty( $order_ids ) ) {
+        error_log('POS Base DEBUG: Encontrados ' . count($order_ids) . ' pedidos de suscripción con fecha de vencimiento.');
+        foreach ( $order_ids as $order_id ) {
+            $order = wc_get_order( $order_id );
+            if ( ! $order ) continue;
 
-            if (!$order) continue; // Si el pedido no existe, saltar
+            $title = $order->get_meta( '_pos_subscription_title' );
+            $expiry_date = $order->get_meta( '_pos_subscription_expiry_date' );
+            $color = $order->get_meta( '_pos_subscription_color' );
 
-            $title = $order->get_meta('_pos_subscription_title'); // Título guardado en el pedido
-            $expiry_date = $order->get_meta('_pos_subscription_expiry_date'); // Fecha guardada en el pedido
-            $color = $order->get_meta('_pos_subscription_color');
-
-            // Usar título del perfil si no hay título específico en el pedido
-            if ( empty($title) ) {
-                $title = get_the_title();
+            if ( empty( $title ) ) {
+                $title = sprintf( __( 'Suscripción: %s', 'pos-base' ), $order->get_formatted_billing_full_name() );
             }
-             // Validar fecha
-            if ( empty($expiry_date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiry_date) ) continue;
+            if ( empty( $expiry_date ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $expiry_date ) ) continue;
 
-            $all_events[] = array(
-                'id'            => 'pos_sub_exp_' . $profile_id, // ID único para evento de suscripción
+            $subscription_events[] = array(
+                'id'            => 'pos_sub_exp_' . $order_id,
                 'title'         => $title,
-                'start'         => $expiry_date,
-                'color'         => !empty($color) ? $color : '#3a87ad', // Color azul por defecto
+                'start'         => $expiry_date, // FullCalendar entiende YYYY-MM-DD
+                'color'         => ! empty( $color ) ? $color : '#3a87ad',
                 'allDay'        => true,
                 'extendedProps' => array(
-                    'type'        => 'subscription_expiry', // Tipo de evento
+                    'type'        => 'subscription_expiry',
                     'order_id'    => $order_id,
-                    'profile_id'  => $profile_id,
                     'customer_id' => $order->get_customer_id(),
                     'order_url'   => $order->get_edit_order_url(),
-                    'profile_url' => get_edit_post_link($profile_id),
                 )
             );
         }
-        wp_reset_postdata(); // Restaurar datos de post
+    } else {
+         error_log('POS Base DEBUG: No se encontraron pedidos de suscripción con fecha de vencimiento.');
     }
 
-    // --- 2. Obtener Vencimientos de Cuentas (Proveedores) ---
-    $account_args = array(
-        'post_type'  => 'pos_account', // Buscar cuentas
-        'post_status'=> 'publish', // O 'any' si quieres ver borradores, etc.
-        'limit'      => -1,
-        'meta_query' => array(
-            'relation' => 'AND',
-            // Que tengan fecha de vencimiento
-            array( 'key' => '_pos_account_expiry_date', 'compare' => 'EXISTS' ),
-            array( 'key' => '_pos_account_expiry_date', 'value' => '', 'compare' => '!=' ),
-            // Opcional: Solo cuentas activas
-            // array( 'key' => '_pos_account_status', 'value' => 'active', 'compare' => '=' ),
-        ),
-        'orderby'    => 'meta_value', // Ordenar por fecha de expiración
-        'meta_key'   => '_pos_account_expiry_date',
-        'order'      => 'ASC',
-    );
-
-    $account_query = new WP_Query( $account_args );
-
-    if ( $account_query->have_posts() ) {
-        while ( $account_query->have_posts() ) {
-            $account_query->the_post();
-            $account_id = get_the_ID();
-            $account_title = get_the_title();
-            $expiry_date = get_post_meta( $account_id, '_pos_account_expiry_date', true );
-
-            // Validar fecha
-            if ( empty($expiry_date) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $expiry_date) ) continue;
-
-            $all_events[] = array(
-                'id'            => 'pos_acc_exp_' . $account_id, // ID único para evento de cuenta
-                'title'         => sprintf( __('Vence Cuenta: %s', 'pos-streaming'), $account_title ), // Título distintivo
-                'start'         => $expiry_date,
-                'color'         => '#dc3545', // Color ROJO por defecto para vencimiento de cuenta
-                'allDay'        => true,
-                'extendedProps' => array(
-                    'type'        => 'account_expiry', // Tipo de evento
-                    'account_id'  => $account_id,
-                    'account_url' => get_edit_post_link($account_id),
-                )
-            );
-        }
-        wp_reset_postdata(); // Restaurar datos de post
-    }
-
-    // --- Devolver todos los eventos combinados ---
-    return new WP_REST_Response( $all_events, 200 );
+    error_log('POS Base DEBUG: pos_base_api_get_calendar_events devolviendo ' . count($subscription_events) . ' eventos.');
+    return new WP_REST_Response( $subscription_events, 200 );
 }
 
+
 /**
- * **MODIFICADO** Callback API: Obtener datos de ventas para DataTables.
- * Ahora incluye los detalles de suscripción en la columna 'Meta'.
+ * Callback API: Obtener datos de ventas para DataTables.
  */
-function pos_streaming_api_get_sales_for_datatable( WP_REST_Request $request ) {
+function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
+    // Parámetros ya validados/sanitizados por 'args'
     $params = $request->get_params();
+    $draw = $params['draw'];
+    $start = $params['start'];
+    $length = $params['length'];
+    $search_value = $params['search']['value'] ?? '';
+    $order_params = $params['order'][0] ?? [];
+    $order_column_index = $order_params['column'] ?? 0;
+    $order_dir = $order_params['dir'] ?? 'desc'; // Por defecto descendente
 
-    // Parámetros de DataTables
-    $draw = isset( $params['draw'] ) ? absint( $params['draw'] ) : 0;
-    $start = isset( $params['start'] ) ? absint( $params['start'] ) : 0;
-    $length = isset( $params['length'] ) ? absint( $params['length'] ) : 10;
-    $search_value = isset( $params['search']['value'] ) ? sanitize_text_field( $params['search']['value'] ) : '';
+    error_log('POS Base DEBUG: Entrando en pos_base_api_get_sales_for_datatable. Draw: ' . $draw . ', Start: ' . $start . ', Length: ' . $length . ', Search: "' . $search_value . '"');
 
-    // Mapeo de columnas
+    // --- Mapeo de columnas de DataTables a campos de WC_Order_Query ---
     $column_map = array(
-        0 => 'ID', 1 => 'date', 2 => 'customer', 3 => 'total',
-        4 => '_pos_sale_type', 5 => 'note', 6 => 'meta',
+        0 => 'ID',          // Pedido #
+        1 => 'date_created',// Fecha
+        2 => 'billing_full_name', // Cliente (aproximado, WC_Order_Query no ordena bien por esto directamente)
+        3 => 'total',       // Total
+        4 => '_pos_sale_type', // Tipo (POS) - Ordenar por meta
+        5 => 'ID',          // Notas (no se puede ordenar directamente)
+        6 => 'ID',          // Meta (no se puede ordenar directamente)
     );
-
-    $order_column_index = isset( $params['order'][0]['column'] ) ? absint( $params['order'][0]['column'] ) : 0;
-    $order_dir = isset( $params['order'][0]['dir'] ) && strtolower( $params['order'][0]['dir'] ) === 'asc' ? 'ASC' : 'DESC';
     $orderby = $column_map[ $order_column_index ] ?? 'ID';
+    // --- Fin mapeo ---
 
-    // Argumentos base para WC_Order_Query
+    // --- Argumentos base para WC_Order_Query ---
     $args = array(
-        'limit'    => $length,
-        'offset'   => $start,
-        'orderby'  => $orderby,
-        'order'    => $order_dir,
-        'paginate' => true,
-        'return'   => 'ids',
+        'return'    => 'ids', // Obtener solo IDs para eficiencia
+        'paginate'  => true,  // Habilitar paginación
+        'limit'     => $length, // Registros por página
+        'paged'     => $length > 0 ? ( $start / $length ) + 1 : 1, // Calcular página actual
+        'orderby'   => $orderby,
+        'order'     => strtoupper($order_dir),
     );
 
-    // Manejo de ordenación por metadatos
+    // Ajuste para ordenar por metadatos
     if ( in_array( $orderby, ['_pos_sale_type'] ) ) {
-        $args['orderby'] = 'meta_value';
         $args['meta_key'] = $orderby;
+        $args['orderby'] = 'meta_value';
+    }
+    // Ajuste para ordenar por nombre de cliente (mejor esfuerzo)
+    if ($orderby === 'billing_full_name') {
+         // WC_Order_Query no ordena bien por nombre completo, ordenar por ID como fallback
+         $args['orderby'] = 'ID';
     }
 
-    // Manejo de Búsqueda
+
+    // Añadir búsqueda si existe
     if ( ! empty( $search_value ) ) {
+        // 's' busca en ID, email, nombre, apellido, items (SKU/nombre)
         $args['s'] = $search_value;
+        // Podríamos añadir búsqueda en meta_query si es necesario
     }
+    // --- Fin argumentos ---
 
-    // Consulta para obtener IDs y totales
+    error_log('POS Base DEBUG: WC_Order_Query args: ' . print_r($args, true));
+
+    // Ejecutar la consulta para obtener IDs paginados y filtrados
     $order_query = new WC_Order_Query( $args );
-    $result_object = $order_query->get_orders();
+    $result_object = $order_query->get_orders(); // Devuelve un objeto con 'orders' y 'total'
     $order_ids = $result_object->orders ?? [];
-    $records_filtered = $result_object->total ?? 0;
+    $records_filtered = $result_object->total ?? 0; // Total después de filtrar/buscar
 
-    // Consulta para obtener el total SIN filtrar
-    $total_args = array( 'return' => 'ids', 'limit' => -1 );
+    // Obtener el total de registros SIN filtrar (para DataTables)
+    // Reutilizar args pero quitar paginación, límite y búsqueda
+    $total_args = $args;
+    unset($total_args['paginate'], $total_args['limit'], $total_args['paged'], $total_args['s']);
+    $total_args['return'] = 'count'; // Solo contar
     $total_query = new WC_Order_Query( $total_args );
-    $records_total = count($total_query->get_orders());
+    $records_total = $total_query->get_orders(); // Devuelve el conteo
 
-    // Preparar datos para la respuesta
+    error_log('POS Base DEBUG: Registros encontrados: ' . count($order_ids) . ', Filtrados: ' . $records_filtered . ', Total: ' . $records_total);
+
+    // --- Preparar datos para la respuesta DataTables ---
     $data = array();
     if ( ! empty( $order_ids ) ) {
-        $orders = array_map( 'wc_get_order', $order_ids );
-        $orders = array_filter( $orders );
+        // Obtener objetos WC_Order completos para los IDs encontrados
+        $orders = array_filter( array_map( 'wc_get_order', $order_ids ) );
 
         foreach ( $orders as $order ) {
             $order_id = $order->get_id();
             $order_url = $order->get_edit_order_url();
-            $customer_name = $order->get_formatted_billing_full_name() ?: __( 'Invitado', 'pos-streaming' );
+            $customer_name = $order->get_formatted_billing_full_name() ?: __( 'Invitado', 'pos-base' );
             $user_id = $order->get_customer_id();
             $customer_link = $user_id ? get_edit_user_link( $user_id ) : '';
-            $date_created = $order->get_date_created();
+            $date_created = $order->get_date_created(); // Objeto WC_DateTime
+            $formatted_date = $date_created ? $date_created->date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '-';
 
-            // Obtener notas
-            $notes = wc_get_order_notes( array(
-                'order_id' => $order_id, 'type' => 'internal', 'orderby' => 'date_created', 'order' => 'DESC',
-            ) );
+            // Obtener la última nota (si existe)
+            $notes = wc_get_order_notes( array( 'order_id' => $order_id, 'number' => 1, 'order' => 'DESC', 'type' => 'customer' ) ); // O 'internal' o '' para todas
             $notes_html = '';
             if (!empty($notes)) {
                 $latest_note = reset($notes);
-                // Usar wp_kses_post para permitir el <br> pero escapar otro HTML potencialmente peligroso
                 $notes_html = wp_kses_post( wp_trim_words( $latest_note->content, 15, '...' ) );
             }
 
@@ -887,63 +1173,58 @@ function pos_streaming_api_get_sales_for_datatable( WP_REST_Request $request ) {
             $sale_type = $order->get_meta( '_pos_sale_type', true );
             $sale_type_label = $sale_type ? esc_html( ucfirst( $sale_type ) ) : 'N/A';
 
-            // --- **NUEVO:** Construir contenido para la columna 'Meta' ---
-            $meta_display = '-'; // Valor por defecto
+            // --- Construir contenido para la columna 'Meta' (Suscripción Base) ---
+            $meta_display = '-';
             if ( $sale_type === 'subscription' ) {
                 $sub_title = $order->get_meta( '_pos_subscription_title', true );
                 $sub_expiry = $order->get_meta( '_pos_subscription_expiry_date', true );
                 $sub_color = $order->get_meta( '_pos_subscription_color', true );
-
                 $meta_parts = [];
-                if ( ! empty( $sub_title ) ) {
-                    $meta_parts[] = '<strong>' . esc_html__( 'Título:', 'pos-streaming' ) . '</strong> ' . esc_html( $sub_title );
-                }
+                if ( ! empty( $sub_title ) ) $meta_parts[] = '<strong>' . esc_html__( 'Título:', 'pos-base' ) . '</strong> ' . esc_html( $sub_title );
                 if ( ! empty( $sub_expiry ) ) {
-                    $formatted_date = $sub_expiry; // Valor por defecto
-                    try {
-                        // Intentar formatear la fecha usando el formato de WP
-                        $date_obj = new DateTime($sub_expiry);
-                        $formatted_date = $date_obj->format(get_option('date_format'));
-                    } catch (Exception $e) { /* Mantener valor original si falla */ }
-                    $meta_parts[] = '<strong>' . esc_html__( 'Vence:', 'pos-streaming' ) . '</strong> ' . esc_html( $formatted_date );
+                    $formatted_expiry = $sub_expiry; try { $date_obj = new DateTime($sub_expiry); $formatted_expiry = $date_obj->format(get_option('date_format')); } catch (Exception $e) {}
+                    $meta_parts[] = '<strong>' . esc_html__( 'Vence:', 'pos-base' ) . '</strong> ' . esc_html( $formatted_expiry );
                 }
                 if ( ! empty( $sub_color ) ) {
-                    // Generar el HTML para el swatch de color y el código
-                    $meta_parts[] = '<strong>' . esc_html__( 'Color:', 'pos-streaming' ) . '</strong> '
-                                   . '<span style="display:inline-block; width: 12px; height: 12px; background-color:' . esc_attr( $sub_color ) . '; border: 1px solid #ccc; vertical-align: middle; margin-right: 3px;"></span>'
-                                   . '<code>' . esc_html( $sub_color ) . '</code>';
+                    $meta_parts[] = '<strong>' . esc_html__( 'Color:', 'pos-base' ) . '</strong> ' . '<span style="display:inline-block; width: 12px; height: 12px; background-color:' . esc_attr( $sub_color ) . '; border: 1px solid #ccc; vertical-align: middle; margin-right: 3px;"></span>' . '<code>' . esc_html( $sub_color ) . '</code>';
                 }
-
-                if ( ! empty( $meta_parts ) ) {
-                    $meta_display = implode( '<br>', $meta_parts ); // Unir con saltos de línea HTML
-                } else {
-                    // Mensaje si es suscripción pero no hay detalles
-                    $meta_display = '<em>' . esc_html__( 'Detalles suscripción no encontrados', 'pos-streaming' ) . '</em>';
-                }
+                if ( ! empty( $meta_parts ) ) $meta_display = implode( '<br>', $meta_parts );
+                else $meta_display = '<em>' . esc_html__( 'Detalles suscripción no encontrados', 'pos-base' ) . '</em>';
             }
             // --- Fin construcción columna 'Meta' ---
 
+            // --- Construir array de datos para la fila ---
             $data[] = array(
-                // Columnas en el orden del HTML/JS
-                sprintf( '<a href="%s"><strong>#%s</strong></a>', esc_url( $order_url ), $order_id ), // 0: Pedido #
-                $date_created instanceof WC_DateTime ? $date_created->date_i18n( get_option( 'date_format' ) ) : 'N/A', // 1: Fecha
-                $customer_link ? sprintf( '<a href="%s">%s</a>', esc_url( $customer_link ), esc_html( $customer_name ) ) : esc_html( $customer_name ), // 2: Cliente
-                $order->get_formatted_order_total(), // 3: Total
-                $sale_type_label, // 4: Tipo (POS)
-                $notes_html, // 5: Notas
-                $meta_display, // 6: Meta <-- Usar la variable construida
+                // Columna 0: Pedido #
+                '<a href="' . esc_url( $order_url ) . '">#' . $order_id . '</a>',
+                // Columna 1: Fecha
+                $formatted_date,
+                // Columna 2: Cliente
+                $customer_link ? '<a href="' . esc_url( $customer_link ) . '">' . esc_html( $customer_name ) . '</a>' : esc_html( $customer_name ),
+                // Columna 3: Total
+                $order->get_formatted_order_total(), // Total formateado con símbolo de moneda
+                // Columna 4: Tipo (POS)
+                $sale_type_label,
+                // Columna 5: Notas
+                $notes_html,
+                // Columna 6: Meta
+                $meta_display,
             );
+            // --- Fin construcción fila ---
         }
     }
+    // --- Fin preparación datos ---
 
-    // Respuesta JSON para DataTables
+    // --- Respuesta JSON formateada para DataTables ---
     $response_data = array(
-        'draw'            => $draw,
-        'recordsTotal'    => $records_total,
-        'recordsFiltered' => $records_filtered,
-        'data'            => $data,
+        "draw"            => $draw,
+        "recordsTotal"    => $records_total,
+        "recordsFiltered" => $records_filtered,
+        "data"            => $data,
     );
+    // --- Fin respuesta ---
 
+    error_log('POS Base DEBUG: pos_base_api_get_sales_for_datatable devolviendo respuesta para Draw ' . $draw);
     return new WP_REST_Response( $response_data, 200 );
 }
 
@@ -954,49 +1235,70 @@ function pos_streaming_api_get_sales_for_datatable( WP_REST_Request $request ) {
 
 /**
  * Prepara los datos del cliente para la respuesta de la API.
+ * Incluye metadatos relevantes como avatar y nota.
  */
-function pos_streaming_prepare_customer_data_for_response( $customer_id ) {
+function pos_base_prepare_customer_data_for_response( $customer_id ) {
     $user_info = get_userdata( $customer_id );
-    if ( ! $user_info ) return array();
+    if ( ! $user_info ) return array(); // Devolver array vacío si el usuario no existe
 
+    // Obtener Avatar Personalizado o Gravatar
     $avatar_id = get_user_meta( $customer_id, 'pos_customer_avatar_id', true );
     $avatar_url = '';
     if ( $avatar_id && $url = wp_get_attachment_image_url( $avatar_id, 'thumbnail' ) ) {
         $avatar_url = $url;
     } else {
+        // Si no hay avatar personalizado, usar Gravatar
         $avatar_url = get_avatar_url( $customer_id, array( 'size' => 96, 'default' => 'mystery' ) );
-        $avatar_id = '';
+        $avatar_id = ''; // Indicar que no es un ID de adjunto
     }
 
-    // **NUEVO:** Obtener la nota del cliente
+    // Obtener Nota del Cliente
     $customer_note = get_user_meta( $customer_id, '_pos_customer_note', true );
 
+    // --- Construir array de datos del cliente ---
     return array(
-        'id'         => $user_info->ID,
+        'id'         => $customer_id,
+        'email'      => $user_info->user_email,
         'first_name' => $user_info->first_name,
         'last_name'  => $user_info->last_name,
-        'email'      => $user_info->user_email,
-        'phone'      => get_user_meta( $customer_id, 'billing_phone', true ),
-        'avatar_id'  => $avatar_id,
+        'display_name' => $user_info->display_name,
+        'phone'      => get_user_meta( $customer_id, 'billing_phone', true ), // Obtener teléfono de facturación
         'avatar_url' => $avatar_url,
-        'note'       => $customer_note, // <-- AÑADIDO: Incluir la nota
+        'meta_data'  => array( // Incluir metadatos relevantes
+            array( 'key' => 'pos_customer_avatar_id', 'value' => $avatar_id ), // Devolver el ID si existe
+            array( 'key' => '_pos_customer_note', 'value' => $customer_note ),
+            // Podríamos añadir más metadatos si fueran necesarios
+        ),
     );
+    // --- Fin construcción ---
 }
 
 /**
  * Comprueba los permisos para acceder a los endpoints de la API.
+ * Verifica capacidad y nonce.
  */
-function pos_streaming_api_permissions_check( WP_REST_Request $request ) {
-    if ( ! current_user_can( 'manage_woocommerce' ) ) {
-        // error_log('POS API Permission Check FAILED: User cannot manage_woocommerce.');
-        return new WP_Error( 'rest_forbidden_capability', __( 'No tienes permiso.', 'pos-streaming' ), array( 'status' => rest_authorization_required_code() ) );
+function pos_base_api_permissions_check( WP_REST_Request $request ) {
+    error_log('POS Base DEBUG: Entrando en pos_base_api_permissions_check.');
+    $can_manage = current_user_can('manage_woocommerce');
+    error_log('POS Base DEBUG: current_user_can(manage_woocommerce) = ' . ($can_manage ? 'true' : 'false'));
+
+    if ( ! $can_manage ) {
+        error_log('POS Base DEBUG: Error - Permiso denegado (manage_woocommerce).');
+        return new WP_Error( 'rest_forbidden_capability', __( 'No tienes permiso.', 'pos-base' ), array( 'status' => rest_authorization_required_code() ) ); // 401 o 403
     }
+
+    // Verificar Nonce (esencial para peticiones desde el admin)
     $nonce = $request->get_header('X-WP-Nonce') ?: $request->get_param('_wpnonce');
-    if ( empty($nonce) || ! wp_verify_nonce( $nonce, 'wp_rest' ) ) {
-         // error_log('POS API Permission Check FAILED: Invalid or missing nonce.');
-         return new WP_Error( 'rest_forbidden_nonce', __( 'Nonce inválido.', 'pos-streaming' ), array( 'status' => 403 ) );
+    error_log('POS Base DEBUG: Nonce recibido: ' . $nonce);
+    $nonce_verified = wp_verify_nonce( $nonce, 'wp_rest' );
+    error_log('POS Base DEBUG: wp_verify_nonce(wp_rest) = ' . ($nonce_verified ? 'true' : 'false'));
+
+    if ( empty($nonce) || ! $nonce_verified ) {
+         error_log('POS Base DEBUG: Error - Nonce inválido o faltante.');
+         return new WP_Error( 'rest_forbidden_nonce', __( 'Nonce inválido.', 'pos-base' ), array( 'status' => 403 ) ); // 403 Forbidden
     }
-    // error_log('POS API Permission Check PASSED.');
-    return true;
+
+    error_log('POS Base DEBUG: Permisos OK en pos_base_api_permissions_check.');
+    return true; // Permiso concedido
 }
 ?>
