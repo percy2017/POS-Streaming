@@ -1,0 +1,639 @@
+/* --- Reseteo Básico y Box Sizing --- */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* --- Contenedor Principal --- */
+#pos-streaming-app-wrapper {
+    margin-top: 10px;
+}
+
+/* --- Layout Principal (Flexbox) --- */
+#pos-main-layout {
+    display: flex;
+    flex-wrap: wrap; /* Permitir ajuste en pantallas pequeñas */
+    gap: 10px; /* Espacio entre columnas */
+    margin-top: 10px;
+}
+
+/* Columna Izquierda (Productos, Calendario) */
+#pos-left-column {
+    flex: 2; /* Ocupa más espacio */
+    min-width: 300px; /* Ancho mínimo */
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* Espacio entre secciones */
+}
+
+/* Columna Derecha (Cliente, Carrito, Pago) */
+#pos-right-column {
+    flex: 1; /* Ocupa menos espacio */
+    min-width: 280px; /* Ancho mínimo */
+    display: flex;
+    flex-direction: column;
+    gap: 10px; /* Espacio entre secciones */
+}
+
+/* --- Estilo Base para Secciones --- */
+#pos-customer-area,
+#pos-products-area,
+#pos-cart-area,
+#pos-checkout-area,
+#pos-calendar-area {
+    border: 1px solid #ccd0d4; /* Borde sutil estilo WordPress */
+    background-color: #fff;
+    box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    display: flex; /* Usar flex para controlar altura si es necesario */
+    flex-direction: column;
+}
+
+#pos-customer-area h2,
+#pos-products-area h2,
+#pos-cart-area h2,
+#pos-checkout-area h2,
+#pos-calendar-area h2 {
+    font-size: 1.1em;
+    margin: 0;
+    padding: 10px 10px;
+    border-bottom: 1px solid #ccd0d4;
+    background-color: #f6f7f7; /* Fondo ligero para cabeceras */
+    flex-shrink: 0; /* Evitar que el título se encoja */
+}
+
+.pos-section-content {
+    padding: 10px;
+    flex-grow: 1; /* Permitir que el contenido crezca */
+    /* overflow: auto; */ /* Comentado para evitar scrolls no deseados */
+}
+
+/* --- Área de Productos --- */
+#pos-products-area {
+    flex-grow: 1; /* Permitir que crezca */
+}
+#pos-product-search {
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px;
+}
+#pos-product-list {
+    /* overflow-y: auto; */ /* Comentado para evitar scroll interno */
+    border: 1px solid #eee;
+    padding: 0; /* Quitar padding para que items ocupen todo */
+    min-height: 150px; /* Altura mínima para ver mensaje de carga */
+    flex-grow: 1; /* Ocupar espacio disponible en la sección */
+    list-style: none; /* Asegurar que no haya bullets si se usa <ul> */
+    margin: 0;
+}
+/* Título opcional de la lista */
+.pos-product-list-title {
+    font-size: 0.9em;
+    font-style: italic;
+    color: #555;
+    padding: 5px 10px;
+    margin: 0;
+    border-bottom: 1px dashed #eee;
+}
+
+/* Contenedor principal del item de producto */
+.pos-product-item {
+    border-bottom: 1px solid #eee;
+    padding: 10px;
+}
+.pos-product-item:last-child {
+    border-bottom: none;
+}
+
+/* Info principal (imagen, detalles, botón simple/label) */
+.product-main-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px; /* Espacio antes de las variaciones si existen */
+}
+
+.pos-product-thumbnail {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border: 1px solid #eee;
+    flex-shrink: 0;
+}
+
+.product-details {
+    flex-grow: 1;
+}
+
+.product-name {
+    font-weight: 500;
+    display: block; /* Nombre en su propia línea */
+}
+
+.product-meta {
+    font-size: 0.9em;
+    color: #555;
+}
+.product-meta span {
+    margin-right: 8px; /* Espacio entre SKU, Precio, Stock */
+}
+.product-stock-status.stock-outofstock {
+    color: red;
+    font-weight: bold;
+}
+
+.product-actions {
+    margin-left: auto; /* Empujar acciones a la derecha */
+    flex-shrink: 0;
+    padding-left: 10px;
+}
+.product-actions .button {
+    /* Estilos para el botón principal de añadir simple */
+    vertical-align: middle; /* Alinear botón con texto si es necesario */
+}
+.select-variation-label {
+    font-size: 0.9em;
+    color: #777;
+    font-style: italic;
+    vertical-align: middle;
+}
+
+/* Lista de Variaciones */
+.product-variations-list {
+    list-style: none;
+    margin: 10px 0 0 0; /* Espacio arriba */
+    padding: 10px 0 5px 15px; /* Padding izquierdo para indentar */
+    border-top: 1px dashed #ddd; /* Separador visual */
+    background-color: #fdfdfd; /* Fondo ligeramente diferente */
+}
+
+.product-variation-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between; /* Espacio entre detalles y botón */
+    gap: 10px;
+    padding: 6px 0;
+    font-size: 0.9em;
+}
+.product-variation-item:not(:last-child) {
+     border-bottom: 1px dotted #eee; /* Separador entre variaciones */
+}
+
+.variation-details {
+    flex-grow: 1;
+}
+.variation-name {
+    font-weight: 500;
+}
+.variation-sku {
+    color: #666;
+    font-size: 0.9em;
+}
+.variation-price {
+    /* Estilo precio variación */
+}
+.variation-stock-status {
+    font-weight: bold;
+    margin-left: 10px;
+    white-space: nowrap;
+    font-size: 0.9em;
+}
+.product-variation-item.outofstock .variation-stock-status {
+    color: red;
+}
+
+.variation-actions {
+    flex-shrink: 0;
+}
+.variation-actions .button {
+    /* Estilos botón añadir variación */
+}
+
+/* Opcional: Estilo para producto simple agotado */
+.pos-product-item.product-type-simple.product-outofstock .product-main-info {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+.pos-product-item.product-type-simple.product-outofstock .product-actions button {
+    cursor: not-allowed;
+}
+
+/* Mensajes de feedback en listas */
+.message-feedback {
+    padding: 15px;
+    text-align: center;
+    color: #555;
+}
+.message-feedback.loading {
+    font-style: italic;
+}
+.message-feedback.error {
+    color: red;
+    font-weight: bold;
+}
+.message-feedback.info {
+    /* Estilo por defecto */
+}
+
+
+/* --- Área de Cliente --- */
+#pos-customer-area {
+     /* Altura fija o mínima si es necesario */
+}
+#pos-customer-details {
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f9f9f9;
+    border: 1px solid #eee;
+    min-height: 40px;
+}
+
+/*--------------------------------------------------------------
+# Estilos Carrito Editable v1.0.8
+--------------------------------------------------------------*/
+
+/* Contenedor de items del carrito */
+#pos-cart-items {
+    list-style: none;
+    margin: 0 0 15px 0;
+    padding: 0;
+    min-height: 100px; /* Altura mínima */
+    max-height: 250px; /* Altura máxima con scroll */
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 5px; /* Padding interno para los items */
+}
+
+/* Item individual del carrito */
+#pos-cart-items li {
+    display: flex;
+    align-items: center; /* Centrar verticalmente los elementos */
+    justify-content: space-between; /* Distribuir espacio */
+    padding: 5px 5px;
+    border-bottom: 1px solid #eee; /* Separador más sutil */
+    gap: 5px; /* Espacio entre elementos del flex (detalles, precio, subtotal, quitar) */
+}
+#pos-cart-items li:last-child {
+    border-bottom: none;
+}
+#pos-cart-items li.empty-cart {
+    justify-content: center; /* Centrar mensaje de carrito vacío */
+    color: #777;
+    border-bottom: none;
+    padding: 20px 5px;
+}
+
+/* Detalles del item (cantidad, nombre, sku) */
+.pos-cart-item-details {
+    flex-grow: 1; /* Ocupa el espacio disponible */
+    font-size: 0.9em;
+    /* word-break: break-word; */ /* Opcional: si los nombres son muy largos */
+}
+.pos-cart-item-details .qty {
+    font-weight: bold;
+    margin-right: 3px;
+    display: inline-block;
+    min-width: 10px; /* Ancho mínimo para la cantidad */
+    text-align: right;
+}
+.pos-cart-item-details small {
+    color: #666;
+    font-size: 0.9em;
+}
+
+/* Contenedor del input de precio (ahora es un span que envuelve el input) */
+.pos-cart-item-price {
+    flex: 0 0 60px; /* Ancho fijo para el input de precio */
+    /* No necesita white-space: nowrap aquí */
+}
+
+/* Input de precio editable */
+.pos-cart-item-price-input {
+    width: 100%;
+    padding: 4px 6px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    text-align: right;
+    font-size: 0.9em;
+    box-sizing: border-box; /* Incluir padding/border en el width */
+    -moz-appearance: textfield; /* Ocultar flechas en Firefox */
+}
+/* Ocultar flechas en Chrome/Safari/Edge */
+.pos-cart-item-price-input::-webkit-outer-spin-button,
+.pos-cart-item-price-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+/* Estilo al enfocar */
+.pos-cart-item-price-input:focus {
+    border-color: #007cba;
+    box-shadow: 0 0 0 1px #007cba;
+    outline: none;
+}
+
+/* NUEVO: Subtotal de la línea */
+.pos-cart-item-subtotal {
+    flex: 0 0 70px; /* Ancho fijo */
+    font-weight: bold;
+    text-align: right;
+    font-size: 0.9em;
+    color: #333;
+    white-space: nowrap; /* Evitar que se divida */
+}
+
+/* Botón de eliminar */
+.pos-cart-item-remove {
+    flex: 0 0 20px; /* Ancho fijo */
+    color: #a00;
+    font-weight: bold;
+    cursor: pointer;
+    text-align: center;
+    font-size: 1.2em;
+    line-height: 1;
+    padding: 0 2px; /* Pequeño padding para área de clic */
+}
+.pos-cart-item-remove:hover {
+    color: #d00;
+}
+
+
+
+/* --- Área de Checkout (Pago) --- */
+#pos-checkout-area .pos-section-content {
+    display: flex;
+    flex-direction: column;
+    gap: 15px; /* Espacio entre elementos del checkout */
+}
+
+/* Selector de Método de Pago */
+.pos-payment-method label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+#pos-payment-method { /* Si usas un select */
+    width: 100%;
+    padding: 8px;
+}
+#pos-payment-methods-container { /* Si cargas dinámicamente */
+     min-height: 30px; /* Espacio para mensaje de carga */
+}
+#pos-payment-methods-container p em { /* Estilo para mensaje de carga */
+    color: #777;
+}
+
+/* Sección de Cupón */
+.pos-coupon-area {
+    border-top: 1px dashed #ddd;
+    padding-top: 15px;
+}
+.pos-coupon-area label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+.pos-coupon-input-group {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+#pos-coupon-code {
+    flex-grow: 1;
+    padding: 8px;
+}
+#pos-apply-coupon-button {
+    padding: 6px 12px;
+    margin-top: 0;
+    width: auto;
+    flex-shrink: 0;
+}
+
+/* Mensajes de Feedback del Cupón */
+.pos-coupon-feedback {
+    margin-top: 8px;
+    font-size: 0.9em;
+    padding: 5px 8px;
+    border-radius: 3px;
+    display: none; /* Oculto por defecto, mostrar con JS */
+}
+.pos-coupon-feedback.success {
+    color: #1e7e34;
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    display: block;
+}
+.pos-coupon-feedback.error {
+    color: #721c24;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    display: block;
+}
+
+/* Botón Principal de Completar Venta */
+#pos-complete-sale-button {
+    width: 100%;
+    text-align: center;
+    padding: 10px 15px; /* Hacer botón más grande */
+}
+#pos-complete-sale-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* --- Área del Calendario --- */
+#pos-calendar-area {
+    /* Altura mínima o específica si es necesario */
+}
+#pos-calendar {
+    min-height: 400px; /* Darle espacio inicial al calendario */
+    flex-grow: 1; /* Permitir que crezca si hay espacio */
+}
+
+/* --- Responsividad Básica --- */
+@media (max-width: 960px) { /* Punto de quiebre intermedio */
+    #pos-left-column {
+        min-width: 280px; /* Reducir ancho mínimo */
+    }
+     #pos-right-column {
+        min-width: 250px; /* Reducir ancho mínimo */
+    }
+}
+
+@media (max-width: 782px) { /* Punto de quiebre común de WordPress Admin */
+    #pos-main-layout {
+        flex-direction: column; /* Apilar columnas */
+    }
+
+    #pos-left-column,
+    #pos-right-column {
+        flex: 1 1 100%; /* Ocupar todo el ancho */
+        min-width: 0; /* Resetear min-width */
+        width: 100%;
+    }
+
+    #pos-product-list {
+        /* max-height: 300px; */ /* Quitado para evitar doble scroll */
+    }
+    #pos-cart-items {
+         max-height: 200px; /* Reducir altura en pantallas pequeñas */
+    }
+    #pos-calendar {
+        min-height: 300px; /* Reducir altura calendario */
+    }
+}
+
+/*--------------------------------------------------------------
+# Estilos Layout Modal Cliente v1.0.7
+--------------------------------------------------------------*/
+
+/* Contenedor principal del layout dentro del modal */
+.pos-customer-modal-layout {
+    display: flex;              /* Activa Flexbox */
+    gap: 30px;                  /* Espacio entre columna izquierda (avatar) y derecha (campos) */
+    align-items: flex-start;    /* Alinea la parte superior de ambas columnas */
+    margin-bottom: 20px;        /* Espacio antes de los botones de submit */
+}
+
+/* Columna Izquierda: Avatar */
+#pos-customer-avatar-section {
+    flex: 0 0 120px;            /* No crece, no encoge, base de 120px de ancho */
+    text-align: center;
+}
+#pos-customer-avatar-section img {
+    margin-bottom: 10px;        /* Espacio debajo de la imagen */
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid #ddd;
+    background-color: #f0f0f0;
+    /* Width/Height ya definidos en el HTML */
+}
+#pos-customer-avatar-section .button,
+#pos-customer-avatar-section .button-link {
+    display: block;             /* Hace que los botones ocupen todo el ancho */
+    margin-left: auto;
+    margin-right: auto;
+    margin-bottom: 5px;         /* Espacio entre botones */
+    max-width: 100px;           /* Limita ancho de botones */
+}
+#pos-customer-avatar-section .button-link {
+     max-width: none; /* El link de quitar puede ser más ancho */
+}
+
+
+/* Columna Derecha: Contenedor de Campos */
+#pos-customer-fields-wrapper {
+    flex: 1;                    /* Ocupa el espacio restante */
+    display: grid;              /* Activa CSS Grid */
+    grid-template-columns: 1fr 1fr; /* Dos columnas de igual tamaño */
+    gap: 15px 20px;             /* Espacio entre filas (15px) y columnas (20px) */
+}
+
+/* Ajustes para los párrafos dentro del grid */
+#pos-customer-fields-wrapper p {
+    margin: 0;                  /* Quitar margen default, el grid gap lo maneja */
+}
+
+/* Ajustes para etiquetas e inputs dentro del grid */
+#pos-customer-fields-wrapper p label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+#pos-customer-fields-wrapper p input[type="text"],
+#pos-customer-fields-wrapper p input[type="email"],
+#pos-customer-fields-wrapper p input[type="tel"],
+#pos-customer-fields-wrapper .iti--container /* Contenedor intl-tel-input */ {
+    width: 100%;                /* Ocupar todo el ancho de la celda del grid */
+    box-sizing: border-box;     /* Incluir padding/border en el width */
+}
+
+/* Ajuste específico para intl-tel-input si es necesario */
+#pos-customer-fields-wrapper #pos-customer-phone.iti__tel-input {
+     padding-left: 52px; /* Reajustar si es necesario por separateDialCode */
+}
+#pos-customer-search-input {
+    width: 100%;
+}
+
+/* --- Fin Estilos Layout Modal --- */
+
+/*--------------------------------------------------------------
+# Estilos Tipo Venta y Suscripción v1.0.9
+--------------------------------------------------------------*/
+
+/* Contenedor Tipo de Venta */
+.pos-sale-type-area label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+#pos-sale-type {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 15px; /* Espacio antes del siguiente elemento */
+    border: 1px solid #ccc; /* Añadir borde */
+    border-radius: 3px; /* Redondear esquinas */
+}
+
+/* Contenedor Campos Suscripción */
+#pos-subscription-fields {
+    background-color: #f8f9fa; /* Fondo ligeramente diferente */
+    padding: 15px;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    margin-bottom: 15px; /* Espacio antes del método de pago */
+    /* display: none; ya está inline, pero no hace daño */
+}
+#pos-subscription-fields h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 1em;
+    color: #333;
+    border-bottom: 1px solid #ddd; /* Separador para el título */
+    padding-bottom: 8px;
+}
+#pos-subscription-fields p {
+    margin-bottom: 10px;
+}
+#pos-subscription-fields label {
+    display: block;
+    margin-bottom: 3px;
+    font-weight: 600;
+}
+#pos-subscription-fields input[type="text"],
+#pos-subscription-fields input[type="date"] {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    box-sizing: border-box;
+}
+#pos-subscription-fields input[type="color"] {
+    width: 100%; /* Ocupar ancho */
+    height: 35px; /* Altura estándar para input color */
+    padding: 2px; /* Pequeño padding */
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+/* --- Fin Estilos Tipo Venta --- */
+/* Estilo para indicar carga en el calendario */
+#pos-calendar-area .pos-section-content {
+    position: relative; /* Necesario para el overlay */
+    min-height: 300px; /* Altura mínima mientras carga */
+}
+#pos-calendar-area .pos-section-content.loading-calendar::after {
+    content: 'Cargando eventos...';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-style: italic;
+    color: #555;
+    z-index: 10; /* Asegurar que esté sobre el calendario */
+}
