@@ -1,6 +1,6 @@
 /**
  * POS Streaming Application Logic
- * Version: 1.0.9 (Sale Type & Subscription Fields)
+ * Version: 1.1.0 (Tabs Functionality)
  */
 jQuery(function ($) {
     'use strict';
@@ -8,6 +8,10 @@ jQuery(function ($) {
     console.log('DEBUG: posStreamingParams:', typeof posStreamingParams !== 'undefined' ? posStreamingParams : '¡NO DEFINIDO!');
 
     // --- Cache de Selectores DOM ---
+    // Pestañas (Tabs) <-- NUEVO
+    const $tabWrapper = $('.nav-tab-wrapper'); // Contenedor de las pestañas
+    const $tabContents = $('.pos-tab-content'); // Todos los paneles de contenido
+
     // Productos y Carrito
     const productSearchInput = $('#pos-product-search');
     const productListContainer = $('#pos-product-list');
@@ -44,17 +48,26 @@ jQuery(function ($) {
     const $selectedCustomerName = $('#selected-customer-name');
     const $changeCustomerBtn = $('#pos-change-customer-btn');
     const $customerSearchSection = $('.pos-customer-search');
+    const $customerNoteInput = $customerForm.find('#pos-customer-note'); // <-- AÑADIR ESTA LÍNEA
 
     // Checkout & Pago
-    const $saleTypeSelect = $('#pos-sale-type'); // <-- NUEVO
-    const $subscriptionFields = $('#pos-subscription-fields'); // <-- NUEVO
-    const $subscriptionTitle = $('#pos-subscription-title'); // <-- NUEVO
-    const $subscriptionExpiryDate = $('#pos-subscription-expiry-date'); // <-- NUEVO
-    const $subscriptionColor = $('#pos-subscription-color'); // <-- NUEVO
-    const $paymentMethodSelect = $('#pos-payment-method'); // <-- NUEVO (Asumiendo que ya existe o lo añadirás)
-    const $couponCodeInput = $('#pos-coupon-code'); // <-- NUEVO
-    const $applyCouponButton = $('#pos-apply-coupon-button'); // <-- NUEVO
-    const $couponMessage = $('#pos-coupon-message'); // <-- NUEVO
+    const $saleTypeSelect = $('#pos-sale-type');
+    const $subscriptionFields = $('#pos-subscription-fields');
+    const $subscriptionTitle = $('#pos-subscription-title');
+    const $subscriptionExpiryDate = $('#pos-subscription-expiry-date');
+    const $subscriptionColor = $('#pos-subscription-color');
+    const $paymentMethodSelect = $('#pos-payment-method');
+    const $couponCodeInput = $('#pos-coupon-code');
+    const $applyCouponButton = $('#pos-apply-coupon-button');
+    const $couponMessage = $('#pos-coupon-message');
+    const $orderNoteInput = $('#pos-order-note-input'); // <-- AÑADIR ESTA LÍNEA
+
+    // Calendario
+    let calendar = null; // Variable para guardar la instancia del calendario
+
+    // Ventas (DataTables) <-- NUEVO
+    let salesDataTable = null; // Variable para guardar la instancia de DataTables
+
 
     // --- Estado de la Aplicación ---
     // Carrito y Productos
@@ -85,6 +98,53 @@ jQuery(function ($) {
     const PRICE_DEBOUNCE_DELAY = 400;
 
     // --- Funciones ---
+
+    // --- **NUEVO:** Función para manejar el clic en las pestañas ---
+    /**
+     * Maneja el clic en una pestaña de navegación.
+     */
+    function handleTabClick(event) {
+        event.preventDefault(); // Evitar salto de página por el href="#"
+
+        const $clickedTab = $(event.currentTarget); // El <a> que se clickeó
+        const targetTabId = $clickedTab.data('tab'); // Obtener 'pos', 'calendar', o 'sales'
+
+        if ($clickedTab.hasClass('nav-tab-active')) {
+            return; // No hacer nada si ya está activa
+        }
+
+        console.log(`Tab clicked: ${targetTabId}`);
+
+        // 1. Actualizar clases de las pestañas
+        $tabWrapper.find('.nav-tab').removeClass('nav-tab-active'); // Quitar activo de todas
+        $clickedTab.addClass('nav-tab-active'); // Poner activo en la clickeada
+
+        // 2. Mostrar/Ocultar contenido (usando clase 'active' y CSS)
+        $tabContents.removeClass('active'); // Quitar clase 'active' de todos los contenidos
+        const $targetContent = $(`#pos-tab-${targetTabId}`); // Seleccionar el contenido por ID
+        $targetContent.addClass('active'); // Añadir clase 'active' al contenido correcto (CSS lo mostrará)
+
+        // 3. Refrescar componentes si es necesario (ej: Calendario)
+        if (targetTabId === 'calendar' && calendar) {
+            // FullCalendar puede necesitar recalcular su tamaño si estaba oculto
+            console.log('Refrescando tamaño del calendario...');
+            // Usamos un pequeño timeout para asegurar que el contenedor es visible antes de actualizar
+            setTimeout(() => {
+                if (calendar && typeof calendar.updateSize === 'function') {
+                    calendar.updateSize();
+                }
+            }, 50);
+        } else if (targetTabId === 'sales' && salesDataTable) {
+            // DataTables puede necesitar reajustar las columnas si estaba oculto
+            console.log('Ajustando columnas de DataTables...');
+            setTimeout(() => {
+                if (salesDataTable && typeof salesDataTable.columns === 'function') {
+                    salesDataTable.columns.adjust().responsive.recalc();
+                }
+            }, 50);
+        }
+    }
+
 
     // --- Funciones de Productos y Carrito (Existentes y Modificadas) ---
     function showMessage(container, message, type = 'info') {
@@ -246,29 +306,22 @@ jQuery(function ($) {
         let discount = 0;
         let discountType = '';
 
-        // --- NUEVO: Calcular descuento del cupón ---
+        // Calcular descuento del cupón
         if (appliedCoupon) {
             discountType = appliedCoupon.discount_type;
             const couponAmount = parseFloat(appliedCoupon.amount) || 0;
 
             if (discountType === 'percent') {
-                // Calcular descuento porcentual sobre el subtotal
                 discount = (subtotal * couponAmount) / 100;
             } else if (discountType === 'fixed_cart') {
-                // Descuento fijo sobre el carrito, no puede ser mayor que el subtotal
                 discount = Math.min(couponAmount, subtotal);
             } else if (discountType === 'fixed_product') {
-                // Nota: La validación básica no maneja descuentos por producto.
-                // Para POS, podríamos tratarlo como 'fixed_cart' o ignorarlo si es complejo.
-                // Por simplicidad, lo tratamos como fijo al carrito aquí.
                 console.warn(`Cupón 'fixed_product' (${appliedCoupon.code}) tratado como 'fixed_cart' en POS.`);
                 discount = Math.min(couponAmount, subtotal);
             }
-            // Asegurarse de que el descuento no sea negativo
             discount = Math.max(0, discount);
             console.log(`Descuento calculado (${discountType}): ${discount.toFixed(2)}`);
         }
-        // --- Fin cálculo descuento ---
 
         let total = subtotal - discount;
         total = Math.max(0, total); // El total no puede ser negativo
@@ -279,19 +332,18 @@ jQuery(function ($) {
     function updateTotalsUI(subtotal, discount, total) {
         cartSubtotalAmount.text(subtotal.toFixed(2));
         if (discount > 0 && appliedCoupon) {
-            // Mostrar descuento con el código del cupón
             cartDiscountAmount.html(`${discount.toFixed(2)} <small>(${appliedCoupon.code})</small>`);
             cartDiscountRow.show();
         } else {
             cartDiscountRow.hide();
-            cartDiscountAmount.empty(); // Limpiar si no hay descuento
+            cartDiscountAmount.empty();
         }
         cartTotalAmount.text(total.toFixed(2));
         updateCheckoutButtonState();
     }
 
     function showCouponMessage(message, isError = false) {
-        $couponMessage.html(message) // Usar html para poder añadir botón quitar
+        $couponMessage.html(message)
             .removeClass('success error')
             .addClass(isError ? 'error' : 'success')
             .show();
@@ -300,8 +352,8 @@ jQuery(function ($) {
     function validateCouponAPI(couponCode) {
         const url = `${posStreamingParams.rest_url}coupons/validate`;
         console.log(`API Call (Validate Coupon): POST ${url}`);
-        isLoadingCouponAction = true; // Marcar acción en progreso
-        $applyCouponButton.prop('disabled', true).text(posStreamingParams.i18n?.validating || 'Validando...'); // Estado botón
+        isLoadingCouponAction = true;
+        $applyCouponButton.prop('disabled', true).text(posStreamingParams.i18n?.validating || 'Validando...');
 
         return $.ajax({
             url: url,
@@ -310,7 +362,6 @@ jQuery(function ($) {
             contentType: 'application/json',
             data: JSON.stringify({ code: couponCode })
         }).always(() => {
-            // Siempre se ejecuta, re-habilitar botón y limpiar estado loading
             isLoadingCouponAction = false;
             $applyCouponButton.prop('disabled', false).text(posStreamingParams.i18n?.apply || 'Aplicar');
         });
@@ -326,46 +377,42 @@ jQuery(function ($) {
             return;
         }
 
-        // Limpiar mensaje anterior y cupón aplicado
         $couponMessage.empty().hide();
-        appliedCoupon = null; // Limpiar cupón anterior antes de validar uno nuevo
-        calculateTotals(); // Recalcular sin descuento
+        appliedCoupon = null;
+        calculateTotals();
 
         validateCouponAPI(couponCode)
             .done(response => {
-                // Éxito: Cupón válido
                 console.log('Cupón válido:', response);
-                appliedCoupon = response; // Guardar datos del cupón aplicado
+                appliedCoupon = response;
                 const successMsg = posStreamingParams.i18n?.coupon_applied_success || 'Cupón "%s" aplicado.';
-                // Mostrar mensaje con botón para quitar
                 showCouponMessage(
                     `<span>${successMsg.replace('%s', `<strong>${response.code}</strong>`)}</span>
                      <button type="button" class="button-link pos-remove-coupon-button" title="${posStreamingParams.i18n?.remove_coupon || 'Quitar cupón'}">&times;</button>`,
-                    false // No es error
+                    false
                 );
-                $couponCodeInput.prop('disabled', true); // Deshabilitar input
-                $applyCouponButton.hide(); // Ocultar botón aplicar
-                calculateTotals(); // Recalcular totales CON el nuevo descuento
+                $couponCodeInput.prop('disabled', true);
+                $applyCouponButton.hide();
+                calculateTotals();
             })
             .fail(error => {
-                // Error: Cupón inválido o error de API
                 console.error('Error validando cupón:', error);
                 const errorMsg = error?.responseJSON?.message || posStreamingParams.i18n?.coupon_invalid || 'Cupón inválido.';
-                showCouponMessage(errorMsg, true); // Mostrar mensaje de error
-                appliedCoupon = null; // Asegurarse de que no hay cupón aplicado
-                calculateTotals(); // Recalcular sin descuento
-                $couponCodeInput.prop('disabled', false).focus(); // Habilitar input y enfocar
-                $applyCouponButton.show(); // Mostrar botón aplicar
+                showCouponMessage(errorMsg, true);
+                appliedCoupon = null;
+                calculateTotals();
+                $couponCodeInput.prop('disabled', false).focus();
+                $applyCouponButton.show();
             });
     }
 
     function handleRemoveCoupon() {
         console.log('Quitando cupón:', appliedCoupon?.code);
-        appliedCoupon = null; // Limpiar estado
-        $couponMessage.empty().hide(); // Limpiar mensaje
-        $couponCodeInput.val('').prop('disabled', false).focus(); // Limpiar y habilitar input
-        $applyCouponButton.show(); // Mostrar botón aplicar
-        calculateTotals(); // Recalcular totales sin descuento
+        appliedCoupon = null;
+        $couponMessage.empty().hide();
+        $couponCodeInput.val('').prop('disabled', false).focus();
+        $applyCouponButton.show();
+        calculateTotals();
     }
 
     function updateCartItemPrice(itemId, newPrice) {
@@ -420,7 +467,7 @@ jQuery(function ($) {
         const button = $(event.currentTarget); const productId = button.data('product-id');
         const productItemElement = button.closest('.pos-product-item'); const productData = productItemElement.data('productData');
         if (!productData) { console.error(`Datos no encontrados para simple ID: ${productId}`); if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se pudieron obtener datos.', 'error'); return; }
-        const itemToAdd = { id: productData.id, product_id: productData.id, variation_id: null, name: productData.name, sku: productData.sku, price: parseFloat(productData.price) || 0, image_url: productData.image_url, type: 'simple', stock_status: productData.stock_status };
+        const itemToAdd = { id: productData.id, product_id: productData.id, variation_id: null, name: productData.name, sku: productData.sku, price: parseFloat(productData.price) || 0, original_price: parseFloat(productData.price) || 0, image_url: productData.image_url, type: 'simple', stock_status: productData.stock_status };
         addToCart(itemToAdd);
     }
 
@@ -430,7 +477,7 @@ jQuery(function ($) {
         if (!productData || !Array.isArray(productData.variations)) { console.error(`Datos/variaciones no encontrados para padre ID: ${productId}`); if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se pudieron obtener datos.', 'error'); return; }
         const variationData = productData.variations.find(v => v.variation_id === variationId);
         if (!variationData) { console.error(`Datos no encontrados para variación ID: ${variationId}`); if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se pudieron obtener datos de variación.', 'error'); return; }
-        const itemToAdd = { id: variationData.variation_id, product_id: productId, variation_id: variationData.variation_id, name: `${productData.name} - ${variationData.variation_name}`, sku: variationData.sku, price: parseFloat(variationData.price) || 0, image_url: variationData.image_url, type: 'variation', stock_status: variationData.stock_status };
+        const itemToAdd = { id: variationData.variation_id, product_id: productId, variation_id: variationData.variation_id, name: `${productData.name} - ${variationData.variation_name}`, sku: variationData.sku, price: parseFloat(variationData.price) || 0, original_price: parseFloat(variationData.price) || 0, image_url: variationData.image_url, type: 'variation', stock_status: variationData.stock_status };
         addToCart(itemToAdd);
     }
 
@@ -469,6 +516,7 @@ jQuery(function ($) {
         $customerFirstNameInput.val(''); $customerLastNameInput.val('');
         $customerEmailInput.val(''); $customerPhoneInput.val('');
         $customerAvatarIdInput.val('');
+        $customerNoteInput.val(''); // <-- AÑADIR ESTA LÍNEA
         $customerAvatarPreview.attr('src', posStreamingParams.default_avatar_url || '');
         $removeAvatarBtn.hide();
         $customerFormFeedback.hide().removeClass('notice-success notice-error').text('');
@@ -483,8 +531,12 @@ jQuery(function ($) {
         $customerFirstNameInput.val(customerData.first_name || '');
         $customerLastNameInput.val(customerData.last_name || '');
         $customerEmailInput.val(customerData.email || '');
-        if (iti && customerData.phone) { iti.setNumber(customerData.phone); }
-        else { $customerPhoneInput.val(customerData.phone || ''); }
+        if (iti && customerData.phone) { 
+            iti.setNumber(customerData.phone); 
+        } else { 
+            $customerPhoneInput.val(customerData.phone || ''); 
+        }
+        $customerNoteInput.val(customerData.note || ''); // <-- AÑADIR ESTA LÍNEA
         $customerAvatarIdInput.val(customerData.avatar_id || '');
         $customerAvatarPreview.attr('src', customerData.avatar_url || posStreamingParams.default_avatar_url || '');
         if (customerData.avatar_id && customerData.avatar_url !== posStreamingParams.default_avatar_url) { $removeAvatarBtn.show(); }
@@ -522,7 +574,7 @@ jQuery(function ($) {
             .done(customerData => {
                 hideLoading(); populateCustomerForm(customerData);
                 if (typeof tb_show !== 'undefined') {
-                    tb_show(posStreamingParams.i18n?.edit_customer || 'Editar Cliente', '#TB_inline?width=600&height=350&inlineId=pos-customer-modal-content', null); // Ajustar width/height
+                    tb_show(posStreamingParams.i18n?.edit_customer || 'Editar Cliente', '#TB_inline?width=600&height=350&inlineId=pos-customer-modal-content', null);
                     setTimeout(initializeIntlTelInput, 150);
                 } else { console.error('Thickbox (tb_show) no está definido.'); if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se pudo abrir el editor.', 'error'); }
             })
@@ -565,7 +617,10 @@ jQuery(function ($) {
         const customerData = {
             first_name: firstName, last_name: $customerLastNameInput.val().trim(),
             email: $customerEmailInput.val().trim(), phone: phoneNumber,
-            meta_data: [{ key: 'pos_customer_avatar_id', value: $customerAvatarIdInput.val() || '' }]
+            meta_data: [
+                { key: 'pos_customer_avatar_id', value: $customerAvatarIdInput.val() || '' },
+                { key: '_pos_customer_note', value: $customerNoteInput.val() } // <-- AÑADIR ESTE OBJETO AL ARRAY
+            ]
         };
         const customerId = $customerIdInput.val(); const isEditing = !!customerId;
         console.log('Saving customer...', customerData, 'Is Editing:', isEditing);
@@ -689,46 +744,28 @@ jQuery(function ($) {
         } else { console.error('No se pudieron obtener los datos del cliente seleccionado.'); }
     }
 
-    // funciones pagos
-    /**
-     * Muestra u oculta los campos de suscripción según el tipo de venta seleccionado.
-     */
+    // --- Funciones de Checkout y Pago ---
     function handleSaleTypeChange() {
         const selectedType = $saleTypeSelect.val();
         if (selectedType === 'subscription') {
-            $subscriptionFields.slideDown(); // Muestra con animación
+            $subscriptionFields.slideDown();
         } else {
-            $subscriptionFields.slideUp(); // Oculta con animación
+            $subscriptionFields.slideUp();
         }
         console.log('Tipo de venta cambiado a:', selectedType);
     }
 
-    /**
-     * Maneja el clic en el botón "Completar Venta".
-     * Recopila todos los datos y los envía a la API para crear el pedido.
-     */
     function handleCompleteSale() {
         if (isLoadingCheckoutAction || completeSaleButton.prop('disabled')) {
             console.warn("Checkout en progreso o botón deshabilitado.");
             return;
         }
 
-        // 1. Validaciones básicas
-        if (cart.length === 0) {
-            Swal.fire('Error', 'El carrito está vacío.', 'error');
-            return;
-        }
-        if (!currentCustomerId) {
-            Swal.fire('Error', 'No se ha seleccionado un cliente.', 'error');
-            return;
-        }
+        if (cart.length === 0) { Swal.fire('Error', 'El carrito está vacío.', 'error'); return; }
+        if (!currentCustomerId) { Swal.fire('Error', 'No se ha seleccionado un cliente.', 'error'); return; }
         const selectedPaymentMethod = $paymentMethodSelect.val();
-        if (!selectedPaymentMethod) {
-             Swal.fire('Error', 'Selecciona un método de pago.', 'error');
-             return;
-        }
+        if (!selectedPaymentMethod) { Swal.fire('Error', 'Selecciona un método de pago.', 'error'); return; }
 
-        // 2. Recopilar datos del pedido
         const saleType = $saleTypeSelect.val();
         let subscriptionData = null;
 
@@ -736,84 +773,59 @@ jQuery(function ($) {
             const title = $subscriptionTitle.val().trim();
             const expiryDate = $subscriptionExpiryDate.val();
             const color = $subscriptionColor.val();
-
-            // Validar campos de suscripción
             if (!title || !expiryDate) {
                 Swal.fire('Error', 'Por favor, completa el título y la fecha de vencimiento de la suscripción.', 'error');
-                $subscriptionFields.find('input:invalid').first().focus(); // Enfocar primer campo inválido
+                $subscriptionFields.find('input:invalid').first().focus();
                 return;
             }
-            subscriptionData = {
-                title: title,
-                expiry_date: expiryDate,
-                color: color
-            };
+            subscriptionData = { title: title, expiry_date: expiryDate, color: color };
         }
 
         const orderData = {
             customer_id: currentCustomerId,
             payment_method: selectedPaymentMethod,
-            payment_method_title: $paymentMethodSelect.find('option:selected').text(), // Título legible
-            set_paid: true, // Marcar como pagado (ajustar según método de pago si es necesario)
-            billing: {}, // Podríamos obtener datos de facturación del cliente si es necesario
-            shipping: {}, // Probablemente no necesario para servicios digitales
+            payment_method_title: $paymentMethodSelect.find('option:selected').text(),
+            set_paid: true,
+            billing: {}, shipping: {},
             line_items: cart.map(item => ({
                 product_id: item.product_id,
-                variation_id: item.variation_id || 0, // 0 si no es variación
+                variation_id: item.variation_id || 0,
                 quantity: item.quantity,
-                // --- Manejo del Precio Personalizado (IMPORTANTE) ---
-                // Opción A: Enviar precio personalizado como metadato
-                // total: (item.original_price * item.quantity).toFixed(2), // Usar precio original para el total de WC
-                // meta_data: [
-                //     { key: '_pos_custom_price', value: item.current_price.toFixed(2) }
-                // ]
-                // Opción B: Enviar precio personalizado directamente (Requiere filtro PHP)
-                 total: (item.current_price * item.quantity).toFixed(2), // ¡OJO! WC puede recalcular esto
-                 price: item.current_price // Enviar precio unitario personalizado
-                // ----------------------------------------------------
+                total: (item.current_price * item.quantity).toFixed(2),
+                price: item.current_price
             })),
-            meta_data: [ // Metadatos a nivel de pedido
-                { key: '_pos_sale_type', value: saleType }
-            ],
-            coupon_lines: []
+            meta_data: [ { key: '_pos_sale_type', value: saleType } ],
+            coupon_lines: [],
+            pos_order_note: $orderNoteInput.val().trim() // <-- AÑADIR ESTA LÍNEA
         };
 
         if (appliedCoupon) {
             orderData.coupon_lines.push({ code: appliedCoupon.code });
         }
 
-        // Añadir metadatos de suscripción si aplica
         if (subscriptionData) {
             orderData.meta_data.push({ key: '_pos_subscription_title', value: subscriptionData.title });
             orderData.meta_data.push({ key: '_pos_subscription_expiry_date', value: subscriptionData.expiry_date });
             orderData.meta_data.push({ key: '_pos_subscription_color', value: subscriptionData.color });
         }
 
-        // Añadir cupón si aplica (requiere lógica de applyCoupon)
-        // const appliedCoupon = getCurrentAppliedCoupon(); // Necesitarías esta función
-        // if (appliedCoupon) {
-        //     orderData.coupon_lines = [{ code: appliedCoupon.code }];
-        // }
-
         console.log("Datos del pedido a enviar:", orderData);
 
-        // 3. Llamar a la API para crear el pedido
         isLoadingCheckoutAction = true;
         completeSaleButton.prop('disabled', true).text(posStreamingParams.i18n?.processing || 'Procesando...');
         showLoading(posStreamingParams.i18n?.creating_order || 'Creando pedido...');
 
-        // --- Placeholder: Necesitas un endpoint API para crear el pedido ---
         createOrder(orderData)
             .done(response => {
                 hideLoading();
                 Swal.fire({
                     icon: 'success',
                     title: posStreamingParams.i18n?.order_created_success || '¡Pedido Creado!',
-                    text: `Pedido #${response.id} creado correctamente.`, // Asumiendo que la API devuelve el pedido creado
-                    showConfirmButton: true // O false y timer
+                    text: `Pedido #${response.id} creado correctamente.`,
+                    showConfirmButton: true
                 });
-                // Limpiar estado después de éxito
                 resetPOSState();
+                refreshSalesDataTable();
             })
             .fail(error => {
                 hideLoading();
@@ -824,20 +836,14 @@ jQuery(function ($) {
             .always(() => {
                 isLoadingCheckoutAction = false;
                 completeSaleButton.text(posStreamingParams.i18n?.complete_sale || 'Completar Venta');
-                // Habilitar/deshabilitar se maneja en updateCheckoutButtonState
                 updateCheckoutButtonState();
             });
-        // --- Fin Placeholder ---
     }
 
-    /**
-     * Carga las pasarelas de pago disponibles desde la API y puebla el select.
-     */
     async function loadPaymentMethods() {
         const placeholderOption = `<option value="" disabled selected>${posStreamingParams.i18n?.loading_payment_methods || 'Cargando métodos...'}</option>`;
-        $paymentMethodSelect.html(placeholderOption).prop('disabled', true); // Mostrar carga y deshabilitar
+        $paymentMethodSelect.html(placeholderOption).prop('disabled', true);
 
-        // Asegurarse de que los parámetros necesarios están definidos
         if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
             console.error('loadPaymentMethods: posStreamingParams no está definido o incompleto.');
             $paymentMethodSelect.html(`<option value="" disabled selected>${posStreamingParams.i18n?.error_loading_payment_methods || 'Error config.'}</option>`);
@@ -849,61 +855,39 @@ jQuery(function ($) {
             console.log(`API Call (Payment Gateways): GET ${apiUrl}`);
             const response = await fetch(apiUrl, {
                 method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-WP-Nonce': posStreamingParams.nonce // Incluir Nonce
-                }
+                headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': posStreamingParams.nonce }
             });
 
-            // Verificar si la respuesta es OK (status 200-299)
             if (!response.ok) {
-                    // Intentar obtener mensaje de error del cuerpo si es JSON
-                    let errorMsg = `Error ${response.status}`;
-                    try {
-                        const errorData = await response.json();
-                        errorMsg = errorData.message || errorMsg;
-                    } catch(e) {
-                        // El cuerpo no era JSON o hubo otro error al leerlo
-                        console.warn("No se pudo parsear el cuerpo de la respuesta de error.");
-                    }
+                let errorMsg = `Error ${response.status}`;
+                try { const errorData = await response.json(); errorMsg = errorData.message || errorMsg; } catch(e) { console.warn("No se pudo parsear el cuerpo de la respuesta de error."); }
                 throw new Error(errorMsg);
             }
 
             const gateways = await response.json();
 
             if (Array.isArray(gateways) && gateways.length > 0) {
-                $paymentMethodSelect.empty(); // Limpiar placeholder de carga
-                // Añadir opción "Seleccionar..."
+                $paymentMethodSelect.empty();
                 $paymentMethodSelect.append(`<option value="" disabled selected>${posStreamingParams.i18n?.select_payment_method || '-- Selecciona Método --'}</option>`);
-                // Añadir cada pasarela como opción
                 gateways.forEach(gateway => {
-                    // Escapar el título por seguridad, aunque debería venir limpio del backend
                     const escapedTitle = $('<div>').text(gateway.title).html();
                     $paymentMethodSelect.append(`<option value="${gateway.id}">${escapedTitle}</option>`);
                 });
-                $paymentMethodSelect.prop('disabled', false); // Habilitar select
+                $paymentMethodSelect.prop('disabled', false);
                 console.log('Métodos de pago cargados:', gateways);
             } else {
-                // No se encontraron pasarelas activas
                 $paymentMethodSelect.html(`<option value="" disabled selected>${posStreamingParams.i18n?.no_payment_methods || 'No hay métodos'}</option>`);
                 console.warn('No se encontraron métodos de pago activos.');
             }
 
         } catch (error) {
-            // Error durante la llamada fetch o procesamiento
             console.error('Error cargando métodos de pago:', error);
             $paymentMethodSelect.html(`<option value="" disabled selected>${posStreamingParams.i18n?.error_loading_payment_methods || 'Error al cargar'}</option>`);
         }
     }
-    
-    /**
-     * Envía los datos del pedido a la API REST para crear un pedido WC.
-     * @param {object} orderData - Datos del pedido.
-     * @returns {jqXHR}
-     */
+
     function createOrder(orderData) {
-        // --- ¡¡¡IMPLEMENTACIÓN REAL NECESARIA EN pos-api.php y aquí!!! ---
-        const url = `${posStreamingParams.rest_url}orders`; // Endpoint hipotético
+        const url = `${posStreamingParams.rest_url}orders`;
         console.log(`API Call (Create Order): POST ${url}`, orderData);
         return $.ajax({
             url: url, method: 'POST',
@@ -911,45 +895,185 @@ jQuery(function ($) {
             contentType: 'application/json',
             data: JSON.stringify(orderData)
         });
-        // --- Fin Implementación Real ---
     }
 
-    // --- **NUEVO:** Función para resetear estado después de venta ---
     function resetPOSState() {
-        // Limpiar carrito
-        cart = [];
-        updateCartUI();
-        calculateTotals();
-
-        // Deseleccionar cliente
+        cart = []; updateCartUI(); calculateTotals();
         handleDeselectCustomer();
-
-        // Resetear campos de checkout
-        $saleTypeSelect.val('direct'); // Volver a 'Directo'
-        handleSaleTypeChange(); // Ocultar campos de suscripción
-        $subscriptionTitle.val('');
-        $subscriptionExpiryDate.val('');
-        $subscriptionColor.val('#3a87ad'); // Resetear color
-        $paymentMethodSelect.val(''); // Resetear método de pago
-        $couponCodeInput.val(''); // Limpiar cupón
-        $couponMessage.empty().hide(); // Limpiar mensaje cupón
-
-        // Resetear cupón 
-        appliedCoupon = null; // Limpiar estado del cupón
-        $couponCodeInput.val('').prop('disabled', false); // Limpiar y habilitar input
-        $couponMessage.empty().hide(); // Limpiar mensaje
-        $applyCouponButton.show()
-
-        // Opcional: Limpiar búsqueda de productos
-        // productSearchInput.val('');
-        // fetchProducts('', 1, true); // Volver a mostrar destacados
-
+        $saleTypeSelect.val('direct'); handleSaleTypeChange();
+        $subscriptionTitle.val(''); $subscriptionExpiryDate.val(''); $subscriptionColor.val('#3a87ad');
+        $paymentMethodSelect.val('');
+        $orderNoteInput.val('');
+        appliedCoupon = null; $couponCodeInput.val('').prop('disabled', false); $couponMessage.empty().hide(); $applyCouponButton.show();
         console.log("Estado del POS reseteado después de la venta.");
     }
 
+    // --- Funciones del Calendario ---
+    function initCalendar() {
+        const calendarEl = document.getElementById('pos-calendar');
+        if (!calendarEl) { console.error('Elemento del calendario #pos-calendar no encontrado.'); return; }
+        if (typeof FullCalendar === 'undefined') { console.error('Librería FullCalendar no cargada.'); calendarEl.innerHTML = '<p style="color:red;">Error: Librería del calendario no disponible.</p>'; return; }
+        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) { console.error('initCalendar: posStreamingParams no está definido o incompleto.'); calendarEl.innerHTML = '<p style="color:red;">Error de configuración para cargar eventos.</p>'; return; }
+
+        // Destruir instancia anterior si existe (para evitar duplicados al recargar)
+        if (calendar) {
+            try { calendar.destroy(); } catch(e) { console.warn("Error destruyendo calendario previo:", e); }
+            calendar = null;
+        }
+
+        calendar = new FullCalendar.Calendar(calendarEl, {
+            initialView: 'dayGridMonth', locale: 'es',
+            headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,listWeek' },
+            buttonText: { today: 'Hoy', month: 'Mes', week: 'Semana', list: 'Lista' },
+            navLinks: true, editable: false, dayMaxEvents: true,
+            events: {
+                url: `${posStreamingParams.rest_url}calendar-events?_wpnonce=${posStreamingParams.nonce}`,
+                method: 'GET',
+                failure: function(error) {
+                    console.error('Error cargando eventos del calendario:', error);
+                    if (typeof Swal !== 'undefined') { Swal.fire('Error', 'No se pudieron cargar los eventos del calendario.', 'error'); }
+                },
+            },
+            eventClick: function(info) {
+                info.jsEvent.preventDefault();
+                const eventData = info.event; const props = eventData.extendedProps;
+                console.log('Evento clickeado:', eventData);
+                if (props.order_url) { window.open(props.order_url, '_blank'); }
+                else if (props.order_id && posStreamingParams.admin_url) {
+                    const editUrl = `${posStreamingParams.admin_url}admin.php?page=wc-orders&action=edit&id=${props.order_id}`;
+                    window.open(editUrl, '_blank');
+                } else { Swal.fire('Info', `Vencimiento: ${eventData.title}${props.order_id ? `\nPedido ID: ${props.order_id}` : ''}`, 'info'); }
+            },
+            loading: function(isLoading) {
+                const calendarWrapper = $(calendarEl).closest('.pos-section-content');
+                if (isLoading) { console.log('Calendario cargando eventos...'); calendarWrapper.addClass('loading-calendar'); }
+                else { console.log('Calendario terminó de cargar eventos.'); calendarWrapper.removeClass('loading-calendar'); }
+            }
+        });
+
+        calendar.render();
+        console.log('FullCalendar inicializado.');
+    }
+
+    // --- **NUEVO:** Funciones de DataTables para Ventas ---
+    /**
+     * Inicializa la tabla de ventas con DataTables.
+     */
+    function initSalesDataTable() {
+        const $salesTable = $('#pos-sales-datatable');
+        if (!$salesTable.length) {
+            console.warn('Tabla de ventas #pos-sales-datatable no encontrada.');
+            return;
+        }
+        if (typeof $.fn.DataTable === 'undefined') {
+            console.error('Librería DataTables no cargada.');
+            $salesTable.replaceWith('<p style="color:red;">Error: Librería DataTables no disponible.</p>');
+            return;
+        }
+        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
+            console.error('initSalesDataTable: posStreamingParams no está definido o incompleto.');
+            $salesTable.replaceWith('<p style="color:red;">Error de configuración para cargar datos de ventas.</p>');
+            return;
+        }
+
+        // Destruir instancia anterior si existe
+        if (salesDataTable && $.fn.DataTable.isDataTable($salesTable)) {
+            console.log('Destruyendo instancia previa de DataTables...');
+            salesDataTable.destroy();
+            $salesTable.empty(); // Limpiar thead/tbody si DataTables los modificó
+        }
+
+        console.log('Inicializando DataTables para #pos-sales-datatable...');
+        salesDataTable = $salesTable.DataTable({
+            processing: true, // Muestra indicador de procesamiento
+            serverSide: true, // Habilita procesamiento del lado del servidor
+            ajax: {
+                url: `${posStreamingParams.rest_url}sales-datatable`, // URL del endpoint API
+                type: 'GET',
+                // Añadir el nonce a la cabecera de la petición AJAX
+                beforeSend: function (xhr) {
+                    xhr.setRequestHeader('X-WP-Nonce', posStreamingParams.nonce);
+                },
+                // Especificar que los datos vienen en la propiedad 'data' de la respuesta JSON
+                dataSrc: 'data',
+                // Manejo de errores AJAX
+                error: function (xhr, error, thrown) {
+                    console.error("Error en AJAX de DataTables:", error, thrown);
+                    console.log("Respuesta del servidor:", xhr.responseText);
+                    // Mostrar un mensaje de error al usuario en la tabla
+                    $salesTable.find('tbody').html(
+                        '<tr><td colspan="7" class="dataTables_empty">' + (posStreamingParams.i18n?.dt_error || 'Error al cargar los datos.') + '</td></tr>'
+                    );
+                    // Opcional: usar SweetAlert
+                    // if (typeof Swal !== 'undefined') { Swal.fire('Error', 'No se pudieron cargar las ventas.', 'error'); }
+                }
+            },
+            // Definición de las columnas (debe coincidir con el orden en HTML y los datos de la API)
+            columns: [
+                { data: 0, name: 'ID' },         // Pedido # (índice 0 en la API)
+                { data: 1, name: 'date' },       // Fecha (índice 1)
+                { data: 2, name: 'customer' },   // Cliente (índice 2)
+                { data: 3, name: 'total', className: 'dt-body-right' }, // Total (índice 3), alineado a la derecha
+                { data: 4, name: '_pos_sale_type' }, // Tipo (POS) (índice 4)
+                { data: 5, name: 'note', orderable: false, searchable: false }, // Notas (índice 5), no ordenable/buscable por defecto
+                { data: 6, name: 'meta', orderable: false, searchable: false }  // Meta (índice 6), no ordenable/buscable
+            ],
+            // Configuración del idioma usando las traducciones de posStreamingParams
+            language: {
+                processing: posStreamingParams.i18n?.dt_processing || 'Procesando...',
+                search: posStreamingParams.i18n?.dt_search || 'Buscar:',
+                lengthMenu: posStreamingParams.i18n?.dt_lengthMenu || 'Mostrar _MENU_ registros',
+                info: posStreamingParams.i18n?.dt_info || 'Mostrando _START_ a _END_ de _TOTAL_ registros',
+                infoEmpty: posStreamingParams.i18n?.dt_infoEmpty || 'Mostrando 0 a 0 de 0 registros',
+                infoFiltered: posStreamingParams.i18n?.dt_infoFiltered || '(filtrado de _MAX_ registros totales)',
+                loadingRecords: posStreamingParams.i18n?.dt_loadingRecords || 'Cargando...',
+                zeroRecords: posStreamingParams.i18n?.dt_zeroRecords || 'No se encontraron registros coincidentes',
+                emptyTable: posStreamingParams.i18n?.dt_emptyTable || 'No hay datos disponibles en la tabla',
+                paginate: {
+                    first: posStreamingParams.i18n?.dt_paginate_first || 'Primero',
+                    previous: posStreamingParams.i18n?.dt_paginate_previous || 'Anterior',
+                    next: posStreamingParams.i18n?.dt_paginate_next || 'Siguiente',
+                    last: posStreamingParams.i18n?.dt_paginate_last || 'Último'
+                },
+                aria: {
+                    sortAscending: posStreamingParams.i18n?.dt_aria_sortAscending || ': activar para ordenar la columna ascendente',
+                    sortDescending: posStreamingParams.i18n?.dt_aria_sortDescending || ': activar para ordenar la columna descendente'
+                }
+            },
+            // Orden inicial (por fecha, descendente)
+            order: [[1, 'desc']],
+            // Habilitar diseño responsivo
+            responsive: true,
+            // Guardar estado (paginación, búsqueda) - opcional
+            // stateSave: true,
+            // Longitud de página por defecto
+            pageLength: 10,
+            // Opciones de longitud de página
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "Todos"]],
+        });
+
+        console.log('DataTables inicializado correctamente.');
+    }
+
+    /**
+     * Refresca los datos de la tabla de ventas sin recargar la página.
+     */
+    function refreshSalesDataTable() {
+        if (salesDataTable) {
+            console.log('Refrescando DataTables de ventas...');
+            // null = no resetea la paginación
+            // false = no resetea el orden/búsqueda
+            salesDataTable.ajax.reload(null, false);
+        } else {
+            console.warn('Intento de refrescar DataTables, pero no está inicializado.');
+        }
+    }
 
     // --- Event Listeners ---
     function bindEvents() {
+        // Pestañas <-- NUEVO
+        $tabWrapper.on('click', 'a.nav-tab', handleTabClick);
+
         // Productos
         productSearchInput.on('input', function () {
             const searchTerm = $(this).val().trim(); clearTimeout(productDebounceTimer);
@@ -960,7 +1084,7 @@ jQuery(function ($) {
 
         // Carrito
         cartItemsContainer.on('click', '.pos-cart-item-remove', handleRemoveCartItemClick);
-        cartItemsContainer.on('input', '.pos-cart-item-price-input', handleCartPriceInputChange); // Listener para precio editable
+        cartItemsContainer.on('input', '.pos-cart-item-price-input', handleCartPriceInputChange);
 
         // Cliente Modal
         $addNewCustomerBtn.on('click', handleOpenNewCustomerModal);
@@ -974,141 +1098,19 @@ jQuery(function ($) {
         // Búsqueda Cliente
         $customerSearchInput.on('input', handleCustomerSearchInput);
         $customerSearchResults.on('click', 'li[data-customer-id]', handleSelectCustomerResult);
-        $(document).on('click', function(event) { // Ocultar resultados al hacer clic fuera
+        $(document).on('click', function(event) {
             if (!$(event.target).closest('.pos-customer-search').length) { $customerSearchResults.hide(); }
         });
 
-        // --- NUEVO: Listeners para Cupón ---
+        // Cupón
         $applyCouponButton.on('click', handleApplyCoupon);
-        // Listener delegado para el botón quitar cupón (ya que se añade dinámicamente)
         $couponMessage.on('click', '.pos-remove-coupon-button', handleRemoveCoupon);
-        // Opcional: Aplicar cupón al presionar Enter en el input
-        $couponCodeInput.on('keypress', function(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Evitar submit si estuviera en un form
-                handleApplyCoupon();
-            }
-        });
+        $couponCodeInput.on('keypress', function(event) { if (event.key === 'Enter') { event.preventDefault(); handleApplyCoupon(); } });
 
         // Checkout
-        $saleTypeSelect.on('change', handleSaleTypeChange); // <-- NUEVO Listener
-        completeSaleButton.on('click', handleCompleteSale); // <-- NUEVO Listener (para placeholder)
-        // Añadir listeners para $applyCouponButton y $paymentMethodSelect si es necesario
-
+        $saleTypeSelect.on('change', handleSaleTypeChange);
+        completeSaleButton.on('click', handleCompleteSale);
     }
-
-    // --- Añadir esta NUEVA función a app.js (o modificar si ya existe un placeholder) ---
-    
-    /**
-     * Inicializa la instancia de FullCalendar.
-     */
-    function initCalendar() {
-        const calendarEl = document.getElementById('pos-calendar');
-    
-        if (!calendarEl) {
-            console.error('Elemento del calendario #pos-calendar no encontrado.');
-            return;
-        }
-    
-        // Verificar si FullCalendar está disponible
-        if (typeof FullCalendar === 'undefined') {
-             console.error('Librería FullCalendar no cargada.');
-             // Mostrar mensaje en el div del calendario
-             calendarEl.innerHTML = '<p style="color:red;">Error: Librería del calendario no disponible.</p>';
-             return;
-        }
-    
-        // Asegurarse de que los parámetros necesarios están definidos
-        if (typeof posStreamingParams === 'undefined' || !posStreamingParams.rest_url || !posStreamingParams.nonce) {
-            console.error('initCalendar: posStreamingParams no está definido o incompleto.');
-            calendarEl.innerHTML = '<p style="color:red;">Error de configuración para cargar eventos.</p>';
-            return;
-        }
-    
-    
-        const calendar = new FullCalendar.Calendar(calendarEl, {
-            initialView: 'dayGridMonth', // Vista inicial
-            locale: 'es', // Idioma español
-            headerToolbar: {
-                left: 'prev,next today',
-                center: 'title',
-                right: 'dayGridMonth,listWeek' // Vistas disponibles
-            },
-            buttonText: { // Textos botones en español
-                 today:    'Hoy',
-                 month:    'Mes',
-                 week:     'Semana',
-                 day:      'Día',
-                 list:     'Lista'
-            },
-            navLinks: true, // Permite hacer clic en días/semanas para navegar
-            editable: false, // No permitir arrastrar eventos (solo visualización)
-            dayMaxEvents: true, // Permite "+ more" link cuando hay muchos eventos
-            events: {
-                url: `${posStreamingParams.rest_url}calendar-events?_wpnonce=${posStreamingParams.nonce}`,
-                method: 'GET',
-                // headers: { // Enviar nonce para autenticación
-                //     'X-WP-Nonce': posStreamingParams.nonce
-                // },
-                failure: function(error) { // Manejo de errores al cargar eventos
-                    console.error('Error cargando eventos del calendario:', error);
-                    if (typeof Swal !== 'undefined') {
-                        Swal.fire('Error', 'No se pudieron cargar los eventos del calendario.', 'error');
-                    }
-                    // Podrías mostrar un mensaje en el propio calendario
-                    // calendarEl.innerHTML = '<p style="color:red;">Error al cargar eventos.</p>';
-                },
-                // Opcional: Cambiar color de texto si el fondo es oscuro
-                // eventDataTransform: function(eventInfo) {
-                //     // Lógica para determinar si el color de fondo es oscuro
-                //     // y añadir eventInfo.textColor = '#ffffff';
-                //     return eventInfo;
-                // }
-            },
-            // Acción al hacer clic en un evento
-            eventClick: function(info) {
-                info.jsEvent.preventDefault(); // Prevenir comportamiento por defecto del navegador
-    
-                const eventData = info.event;
-                const props = eventData.extendedProps;
-    
-                console.log('Evento clickeado:', eventData);
-    
-                if (props.order_url) {
-                    // Abrir la URL de edición del pedido en una nueva pestaña
-                    window.open(props.order_url, '_blank');
-                } else if (props.order_id) {
-                     // Fallback si no hay URL directa (construir manualmente)
-                     // Necesitaríamos admin_url en posStreamingParams
-                     if (posStreamingParams.admin_url) {
-                          // Determinar si usar URL HPOS o tradicional (esto es simplificado)
-                          const editUrl = `${posStreamingParams.admin_url}admin.php?page=wc-orders&action=edit&id=${props.order_id}`;
-                          // const editUrl = `${posStreamingParams.admin_url}post.php?post=${props.order_id}&action=edit`; // Tradicional
-                          window.open(editUrl, '_blank');
-                     } else {
-                          Swal.fire('Info', `Vencimiento: ${eventData.title}\nPedido ID: ${props.order_id}`, 'info');
-                     }
-                } else {
-                     Swal.fire('Info', `Vencimiento: ${eventData.title}`, 'info');
-                }
-            },
-            loading: function(isLoading) { // Indicador visual de carga
-                const calendarWrapper = $(calendarEl).closest('.pos-section-content');
-                if (isLoading) {
-                    console.log('Calendario cargando eventos...');
-                    calendarWrapper.addClass('loading-calendar'); // Añadir clase para mostrar spinner CSS
-                } else {
-                    console.log('Calendario terminó de cargar eventos.');
-                    calendarWrapper.removeClass('loading-calendar'); // Quitar clase
-                }
-            }
-        });
-    
-        calendar.render(); // Renderizar el calendario
-        console.log('FullCalendar inicializado.');
-    }
-    
-    
 
     // --- Inicialización ---
     function init() {
@@ -1122,14 +1124,15 @@ jQuery(function ($) {
         productSearchInput.attr('placeholder', posStreamingParams.i18n?.search_placeholder || 'Buscar producto...');
         $customerSearchInput.attr('placeholder', posStreamingParams.i18n?.search_customer_placeholder || 'Buscar cliente...');
 
-        bindEvents(); // Vincular todos los eventos
-        fetchProducts('', 1, true); // Cargar destacados
-        updateCartUI(); 
-        calculateTotals(); 
+        bindEvents();
+        fetchProducts('', 1, true);
+        updateCartUI();
+        calculateTotals();
         handleDeselectCustomer();
         handleSaleTypeChange();
         loadPaymentMethods();
-        initCalendar(); 
+        initCalendar();
+        initSalesDataTable(); // <-- **NUEVO:** Inicializar DataTables
         console.log('POS Streaming App Initialized.');
     }
 
