@@ -796,6 +796,8 @@ function pos_base_api_validate_coupon( WP_REST_Request $request ) {
 
 /**
  * Callback API: Crear un pedido.
+ * Maneja la creación del pedido, asignación de items, precios, metadatos,
+ * cupones, y la actualización del estado del perfil de streaming si aplica.
  */
 function pos_base_api_create_order( WP_REST_Request $request ) {
     // Parámetros ya validados/sanitizados por 'args'
@@ -821,6 +823,8 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
     }
 
     $order = null;
+    $assigned_profile_id = null; // Inicializar variable para el ID del perfil asignado
+
     try {
         // Crear el pedido con estado pendiente inicial
         $order = wc_create_order( array( 'customer_id' => $customer_id, 'status' => 'wc-pending' ) );
@@ -838,23 +842,15 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
                 'last_name'  => $customer->last_name,
                 'email'      => $customer->user_email,
                 'phone'      => get_user_meta( $customer_id, 'billing_phone', true ),
-                // Añadir más campos si son necesarios (address, city, etc.)
-                // 'address_1'  => get_user_meta( $customer_id, 'billing_address_1', true ),
-                // 'city'       => get_user_meta( $customer_id, 'billing_city', true ),
-                // 'postcode'   => get_user_meta( $customer_id, 'billing_postcode', true ),
-                // 'country'    => get_user_meta( $customer_id, 'billing_country', true ),
-                // 'state'      => get_user_meta( $customer_id, 'billing_state', true ),
+                // Añadir más campos si son necesarios
             );
         } else {
-             // Datos para cliente invitado (ID 0) - Podrían venir en la petición si se implementa
              $billing_details = array(
                  'first_name' => __('Invitado', 'pos-base'),
                  'last_name' => 'POS',
              );
         }
         $order->set_address( $billing_details, 'billing' );
-        // Podríamos añadir dirección de envío si fuera diferente
-        // $order->set_address( $shipping_details, 'shipping' );
         // --- Fin datos facturación ---
 
         // Añadir nota automática del POS
@@ -869,39 +865,33 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         // --- Añadir Items y Precio Personalizado ---
         $pos_calculated_subtotal = 0;
         foreach ( $line_items_data as $item_data ) {
-            // Datos ya validados/sanitizados por 'args'
             $product_id = $item_data['product_id'];
             $variation_id = $item_data['variation_id'] ?? 0;
             $quantity = $item_data['quantity'];
-            $custom_unit_price = $item_data['price']; // Ya es 'number'
+            $custom_unit_price = $item_data['price'];
 
             $product = wc_get_product( $variation_id ?: $product_id );
             if ( ! $product ) {
                 throw new Exception( sprintf( __( 'Producto inválido ID %d.', 'pos-base' ), $variation_id ?: $product_id ) );
             }
 
-            // Añadir producto al pedido
             $item_id = $order->add_product( $product, $quantity );
             if (!$item_id) {
                 throw new Exception( sprintf( __( 'No se pudo añadir producto ID %d al pedido.', 'pos-base' ), $variation_id ?: $product_id ) );
             }
 
-            // Obtener el item recién añadido para modificarlo
             $item = $order->get_item( $item_id );
             if ( ! $item instanceof WC_Order_Item_Product ) {
                 throw new Exception( sprintf( __( 'No se pudo obtener el item %d del pedido.', 'pos-base' ), $item_id ) );
             }
 
-            // Establecer el precio personalizado
             $line_subtotal = $custom_unit_price * $quantity;
-            $line_total = $custom_unit_price * $quantity; // Asumimos que no hay impuestos calculados aquí
+            $line_total = $custom_unit_price * $quantity;
             $pos_calculated_subtotal += $line_total;
 
             $item->set_subtotal( $line_subtotal );
             $item->set_total( $line_total );
-            // Podríamos añadir metadatos al item si fuera necesario
-            // $item->add_meta_data( '_pos_original_price', $product->get_price() );
-            $item->save(); // Guardar cambios en el item
+            $item->save();
             error_log('POS Base DEBUG: Item añadido/actualizado en pedido ' . $order_id . ': Product ID ' . ($variation_id ?: $product_id) . ', Qty: ' . $quantity . ', Price: ' . $custom_unit_price);
         }
         // --- Fin añadir items ---
@@ -909,27 +899,46 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         // Método de Pago
         $payment_gateways = WC()->payment_gateways->payment_gateways();
         if ( isset( $payment_gateways[ $payment_method_id ] ) ) {
-            $order->set_payment_method( $payment_gateways[ $payment_method_id ] ); // Usa el objeto pasarela si existe
+            $order->set_payment_method( $payment_gateways[ $payment_method_id ] );
         } else {
-            // Si es un método manual o no reconocido por WC, guardar ID y título
             $order->set_payment_method( $payment_method_id );
             $order->set_payment_method_title( $payment_method_title );
         }
         error_log('POS Base DEBUG: Método de pago establecido para pedido ' . $order_id . ': ' . $payment_method_id);
 
-        // --- Metadatos del Pedido (incluye los de suscripción base) ---
+        // --- Metadatos del Pedido (incluye los de suscripción base y captura de perfil) ---
         if ( ! empty( $meta_data_input ) ) {
             foreach ( $meta_data_input as $meta_item ) {
-                // Key/Value ya sanitizados por 'args'
                 if ( isset( $meta_item['key'] ) && isset( $meta_item['value'] ) ) {
                     $order->update_meta_data( $meta_item['key'], $meta_item['value'] );
                     error_log('POS Base DEBUG: Metadato añadido/actualizado en pedido ' . $order_id . ': ' . $meta_item['key'] . ' = ' . print_r($meta_item['value'], true));
+
+                    // --- INICIO: CAPTURAR Y VALIDAR PROFILE ID ---
+                    if ( $meta_item['key'] === '_pos_assigned_profile_id' ) {
+                        $profile_id_temp = absint( $meta_item['value'] );
+                        // Verificar si es un ID válido de post y si es del tipo 'pos_profile'
+                        if ( $profile_id_temp > 0 && get_post_type( $profile_id_temp ) === 'pos_profile' ) {
+                            // Verificar si el perfil está realmente disponible
+                            $current_status = get_post_meta( $profile_id_temp, '_pos_profile_status', true );
+                            if ( $current_status === 'available' ) {
+                                $assigned_profile_id = $profile_id_temp; // Guardar ID válido y disponible
+                                error_log('[Streaming Order DEBUG] Perfil ID ' . $assigned_profile_id . ' válido y disponible encontrado en meta.');
+                            } else {
+                                 error_log('[Streaming Order WARNING] Perfil ID ' . $profile_id_temp . ' encontrado pero su estado es "' . $current_status . '", no "available". No se asignará.');
+                                 // Podríamos lanzar una excepción aquí para detener la venta si es crítico
+                                 // throw new Exception( sprintf( __( 'El perfil seleccionado (ID %d) ya no está disponible.', 'pos-streaming' ), $profile_id_temp ) );
+                            }
+                        } else {
+                             error_log('[Streaming Order WARNING] _pos_assigned_profile_id recibido (' . $meta_item['value'] . ') pero no es un ID de perfil válido.');
+                        }
+                    }
+                    // --- FIN: CAPTURAR Y VALIDAR PROFILE ID ---
                 }
             }
         }
         // --- Fin metadatos ---
 
-        // Guardar pedido TEMPRANO para poder aplicar cupones
+        // Guardar pedido TEMPRANO para poder aplicar cupones y tener metadatos guardados
         $order->save();
 
         // --- Aplicar Cupones ---
@@ -938,10 +947,9 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
             error_log('POS Base DEBUG: Aplicando cupones al pedido ' . $order_id . ': ' . print_r($coupon_lines_input, true));
             foreach ( $coupon_lines_input as $coupon_line ) {
                 if ( ! empty( $coupon_line['code'] ) ) {
-                    $result = $order->apply_coupon( $coupon_line['code'] ); // Código ya sanitizado
+                    $result = $order->apply_coupon( $coupon_line['code'] );
                     if (is_wp_error($result)) {
                          error_log('POS Base DEBUG: Error al aplicar cupón ' . $coupon_line['code'] . ': ' . $result->get_error_message());
-                         // Podríamos lanzar una excepción o añadir una nota al pedido
                     } else {
                          error_log('POS Base DEBUG: Cupón ' . $coupon_line['code'] . ' aplicado correctamente.');
                     }
@@ -955,13 +963,30 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         // --- Fin cupones ---
 
         // Calcular y Forzar Total Final (Subtotal POS - Descuento Cupón)
-        // Esto ignora impuestos y envío calculados por WC, forzando el total del POS
         $final_total = max(0, $pos_calculated_subtotal - $coupon_discount_total);
         $order->set_total( $final_total );
         error_log('POS Base DEBUG: Total final calculado y forzado para pedido ' . $order_id . ': ' . $final_total);
 
+        // --- INICIO: ACTUALIZAR ESTADO DEL PERFIL ASIGNADO ---
+        if ( $assigned_profile_id ) {
+            // Actualizar el metadato '_pos_profile_status' del CPT 'pos_profile'
+            $update_result = update_post_meta( $assigned_profile_id, '_pos_profile_status', 'assigned' );
+
+            if ($update_result) {
+                 error_log('[Streaming Order SUCCESS] Estado del Perfil ID ' . $assigned_profile_id . ' actualizado a "assigned".');
+                 // Añadir una nota al pedido indicando el perfil asignado
+                 $profile_title = get_the_title($assigned_profile_id);
+                 $order->add_order_note( sprintf( __( 'Perfil Streaming asignado: %s (ID: %d)', 'pos-streaming' ), $profile_title, $assigned_profile_id ), false, true ); // Nota pública
+            } else {
+                 error_log('[Streaming Order ERROR] Falló al actualizar estado del Perfil ID ' . $assigned_profile_id . ' a "assigned".');
+                 // Considerar qué hacer aquí: ¿revertir? ¿añadir nota de error?
+                 $order->add_order_note( sprintf( __( 'ERROR: Falló al actualizar estado del Perfil Streaming ID %d a "asignado". Revisar manualmente.', 'pos-streaming' ), $assigned_profile_id ), false, true );
+            }
+        }
+        // --- FIN: ACTUALIZAR ESTADO DEL PERFIL ASIGNADO ---
+
+
         // Estado Final y Pago
-        // Usar 'completed' directamente para ventas POS, a menos que sea a crédito
         $sale_type = $order->get_meta('_pos_sale_type'); // Leer el meta que acabamos de guardar
         $final_status = ($sale_type === 'credit') ? 'on-hold' : 'completed'; // Ejemplo: 'on-hold' para crédito
 
@@ -1002,26 +1027,27 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         }
         return new WP_Error( 'rest_order_creation_failed', $e->getMessage(), array( 'status' => 500 ) );
     }
-}
+} // Fin de pos_base_api_create_order
+
 
 /**
- * Callback API: Obtener eventos para FullCalendar (Solo Vencimientos de Suscripciones Base).
+ * Callback API: Obtener eventos para FullCalendar.
+ * Incluye Vencimientos de Suscripciones (desde Pedidos) y Vencimientos de Cuentas Streaming (desde CPT pos_account).
  */
 function pos_base_api_get_calendar_events( WP_REST_Request $request ) {
     error_log('POS Base DEBUG: Entrando en pos_base_api_get_calendar_events.');
-    $subscription_events = array();
+    $all_events = array(); // Array para combinar todos los eventos
 
-    // --- Obtener Vencimientos de Suscripciones Vendidas (desde Pedidos) ---
+    // --- 1. Obtener Vencimientos de Suscripciones Vendidas (desde Pedidos) ---
     $order_args = array(
         'post_type'   => 'shop_order',
-        'post_status' => 'any', // Usar estados válidos
-        'limit'       => -1, // Sin límite
+        'post_status' => array('wc-processing', 'wc-completed', 'wc-on-hold'), // Estados relevantes
+        'limit'       => -1,
         'meta_query'  => array(
             'relation' => 'AND',
             array( 'key' => '_pos_sale_type', 'value' => 'subscription', 'compare' => '=' ),
             array( 'key' => '_pos_subscription_expiry_date', 'compare' => 'EXISTS' ),
             array( 'key' => '_pos_subscription_expiry_date', 'value' => '', 'compare' => '!=' ),
-            // Podríamos añadir filtro por fecha si 'start' y 'end' se pasan en $request
         ),
         'orderby'     => 'meta_value',
         'meta_key'    => '_pos_subscription_expiry_date',
@@ -1042,15 +1068,15 @@ function pos_base_api_get_calendar_events( WP_REST_Request $request ) {
             $color = $order->get_meta( '_pos_subscription_color' );
 
             if ( empty( $title ) ) {
-                $title = sprintf( __( 'Suscripción: %s', 'pos-base' ), $order->get_formatted_billing_full_name() );
+                $title = sprintf( __( 'Vence Suscripción: %s', 'pos-base' ), $order->get_formatted_billing_full_name() ?: ('#' . $order_id) );
             }
             if ( empty( $expiry_date ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $expiry_date ) ) continue;
 
-            $subscription_events[] = array(
+            $all_events[] = array(
                 'id'            => 'pos_sub_exp_' . $order_id,
                 'title'         => $title,
-                'start'         => $expiry_date, // FullCalendar entiende YYYY-MM-DD
-                'color'         => ! empty( $color ) ? $color : '#3a87ad',
+                'start'         => $expiry_date,
+                'color'         => ! empty( $color ) ? $color : '#3a87ad', // Azul por defecto para suscripciones
                 'allDay'        => true,
                 'extendedProps' => array(
                     'type'        => 'subscription_expiry',
@@ -1063,10 +1089,71 @@ function pos_base_api_get_calendar_events( WP_REST_Request $request ) {
     } else {
          error_log('POS Base DEBUG: No se encontraron pedidos de suscripción con fecha de vencimiento.');
     }
+    // --- Fin Vencimientos de Suscripciones ---
 
-    error_log('POS Base DEBUG: pos_base_api_get_calendar_events devolviendo ' . count($subscription_events) . ' eventos.');
-    return new WP_REST_Response( $subscription_events, 200 );
+
+    // --- 2. Obtener Vencimientos de Cuentas Streaming (desde CPT pos_account) ---
+    $account_args = array(
+        'post_type'      => 'pos_account',
+        'post_status'    => 'publish', // Solo cuentas publicadas
+        'posts_per_page' => -1,
+        'meta_query'     => array(
+            array(
+                'key'     => '_pos_account_expiry_date', // El metadato de la cuenta
+                'compare' => 'EXISTS',
+            ),
+             array(
+                'key'     => '_pos_account_expiry_date',
+                'value'   => '',
+                'compare' => '!=',
+            ),
+        ),
+        'orderby'        => 'meta_value', // Ordenar por fecha de vencimiento
+        'meta_key'       => '_pos_account_expiry_date',
+        'order'          => 'ASC',
+    );
+
+    $accounts_query = new WP_Query( $account_args );
+
+    if ( $accounts_query->have_posts() ) {
+        error_log('POS Base DEBUG: Encontradas ' . $accounts_query->post_count . ' cuentas streaming con fecha de vencimiento.');
+        while ( $accounts_query->have_posts() ) {
+            $accounts_query->the_post();
+            $account_id = get_the_ID();
+            $account_title = get_the_title();
+            $expiry_date = get_post_meta( $account_id, '_pos_account_expiry_date', true );
+
+            if ( empty( $expiry_date ) || ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $expiry_date ) ) continue;
+
+            // Formatear título del evento
+            $event_title = sprintf( __( 'Vence Cuenta: %s', 'pos-streaming' ), $account_title );
+
+            // Añadir el evento al array general
+            $all_events[] = array(
+                'id'            => 'pos_acc_exp_' . $account_id, // ID único para este tipo de evento
+                'title'         => $event_title,
+                'start'         => $expiry_date,
+                'color'         => '#dc3545', // Rojo por defecto para vencimiento de cuentas (diferente a suscripciones)
+                'allDay'        => true,
+                'extendedProps' => array(
+                    'type'        => 'account_expiry', // Nuevo tipo para identificarlo en JS si es necesario
+                    'account_id'  => $account_id,
+                    'account_url' => get_edit_post_link( $account_id ), // Enlace para editar la cuenta
+                )
+            );
+        }
+        wp_reset_postdata(); // Importante después de un loop WP_Query con the_post()
+    } else {
+         error_log('POS Base DEBUG: No se encontraron cuentas streaming con fecha de vencimiento.');
+    }
+    // --- Fin Vencimientos de Cuentas ---
+
+
+    // --- Devolver todos los eventos combinados ---
+    error_log('POS Base DEBUG: pos_base_api_get_calendar_events devolviendo ' . count($all_events) . ' eventos en total.');
+    return new WP_REST_Response( $all_events, 200 );
 }
+
 
 
 /**

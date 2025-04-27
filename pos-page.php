@@ -217,7 +217,14 @@ function pos_base_render_page() { // <--- RENOMBRADA
                                         <label for="pos-subscription-color"><?php esc_html_e( 'Color Evento:', 'pos-streaming' ); ?></label>
                                         <input type="color" id="pos-subscription-color" name="pos_subscription_color" value="#3a87ad">
                                     </p>
-                                  
+                                    <?php
+                                    /**
+                                     * Hook para añadir campos adicionales dentro del área de suscripción del POS.
+                                     *
+                                     * @param WP_Post|null $post Objeto del post actual (puede ser null en esta página).
+                                     */
+                                    do_action( 'pos_base_subscription_fields_content', null ); // <-- AÑADIR ESTA LÍNEA
+                                    ?>
                                 </div>
                                 <div class="pos-payment-method">
                                     <label for="pos-payment-method"><?php esc_html_e( 'Método de Pago:', 'pos-streaming' ); ?></label>
