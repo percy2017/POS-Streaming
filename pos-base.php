@@ -51,7 +51,7 @@ function pos_base_init() {
     require_once POS_BASE_PLUGIN_DIR . 'pos-api.php';
     require_once POS_BASE_PLUGIN_DIR . 'pos-metabox.php';
     require_once POS_BASE_PLUGIN_DIR . 'pos-setting.php';
-    // require_once POS_BASE_PLUGIN_DIR . 'pos-tour.php'; // <-- TOUR ELIMINADO
+    require_once POS_BASE_PLUGIN_DIR . 'pos-tour.php'; // <-- TOUR ELIMINADO
 
     // --- Carga Dinámica de Módulos Activos ---
     $active_modules = get_option( 'pos_base_active_modules', [] );

@@ -2,114 +2,188 @@
 (function($) {
     'use strict';
 
+    // Variable para evitar múltiples llamadas AJAX al descartar
+    var dismissingTour = false;
+    // Variable global para rastrear el índice del paso actual
+    var currentTourIndex = -1;
+
     // Función para abrir un pointer específico
     function openPointer(index, pointerData) {
-        // Obtener las opciones del pointer actual
-        var options = $.extend(pointerData.options, {
-            // Función que se ejecuta cuando se hace clic en un botón del pointer
-            buttons: function(event, t) {
-                var button = $(event.target).closest('.button'); // Obtener el botón presionado
+        // Actualizar índice global
+        currentTourIndex = index;
 
-                // Si se hizo clic en 'Cerrar' o en el botón 'X' del tooltip
-                if (button.hasClass('pos-tour-close-btn') || button.hasClass('close')) {
-                    t.element.pointer('close');
-                    // Aquí podríamos añadir la llamada AJAX para marcar el tour como visto
-                    // dismissTour();
-                }
-                // Si se hizo clic en 'Siguiente'
-                else if (button.hasClass('pos-tour-next-btn')) {
-                    t.element.pointer('close'); // Cerrar el actual
-                    var nextIndex = index + 1; // Calcular índice del siguiente paso
-
-                    // Si hay un siguiente paso, abrirlo
-                    if (nextIndex < pointerKeys.length) {
-                        openPointer(nextIndex, pointers[pointerKeys[nextIndex]]);
-                    } else {
-                        // Si es el último paso, el botón 'Siguiente' también cierra
-                        // Aquí también podríamos marcar el tour como visto
-                        // dismissTour();
-                    }
-                }
-            },
-            // Función que se ejecuta al cerrar el pointer (ej: con la 'X')
-            close: function() {
-                // Aquí también podríamos marcar el tour como visto si se cierra manualmente
-                // dismissTour();
+        // Verificar si los datos del pointer son válidos
+        if (!pointerData || !pointerData.target || !pointerData.options) {
+            console.error('POS Tour: Datos inválidos para el paso ' + index, pointerData);
+            var nextIndex = index + 1;
+            if (nextIndex < pointerKeys.length) {
+                setTimeout(function() { openPointer(nextIndex, pointers[pointerKeys[nextIndex]]); }, 100);
             }
-        });
+            return;
+        }
+
+        // Clonar las opciones originales de PHP para referencia
+        let originalPointerOptions = $.extend(true, {}, pointerData.options);
+
+        // --- Opciones Finales para wp-pointer ---
+        // Crear la definición base de los botones que viene de PHP
+        let buttonDefinitionArray = $.extend(true, [], originalPointerOptions.buttons || []);
+
+        // Ajustar etiqueta a 'Finalizar' si es el último paso
+        if (currentTourIndex === pointerKeys.length - 1) {
+            $.each(buttonDefinitionArray, function(i, buttonDef) {
+                if (buttonDef.name === 'next') {
+                    buttonDef.label = posBaseTourData.i18n?.finish || 'Finalizar';
+                    return false;
+                }
+            });
+        }
+
+        // Opciones que SÍ pasamos a wp-pointer:
+        var options = {
+            content: originalPointerOptions.content,
+            position: originalPointerOptions.position,
+            // PASAMOS LA FUNCIÓN buttons que devuelve la ESTRUCTURA para renderizar
+            buttons: function(event, t) {
+                console.log('POS Tour: buttons callback (renderizado). Event:', event, 'Instance:', t);
+                var $buttons = $();
+                $.each(buttonDefinitionArray, function(i, buttonDef) {
+                    var $button = $('<button type="button" class="button"></button>')
+                        .addClass(buttonDef.class || '')
+                        .html(buttonDef.label || '');
+                    if (buttonDef.name) {
+                        $button.attr('data-button-name', buttonDef.name);
+                    }
+                    $buttons = $buttons.add($button);
+                });
+                console.log('POS Tour: Devolviendo elementos de botón para renderizar.');
+                return $buttons;
+            }
+            // --- ELIMINAMOS EL CALLBACK 'close' ---
+            // close: function() { ... } // <-- ELIMINADO
+        };
 
         // Verificar si el elemento target existe en la página
         var $targetElement = $(pointerData.target);
         if ($targetElement.length === 0) {
             console.warn('POS Tour: Target element not found for step:', pointerData.target);
-            // Podríamos intentar saltar al siguiente paso si el target no se encuentra
-            var nextIndex = index + 1;
-            if (nextIndex < pointerKeys.length) {
-                // Esperar un poco por si el elemento aparece más tarde (ej: carga AJAX)
-                setTimeout(function() {
-                    openPointer(nextIndex, pointers[pointerKeys[nextIndex]]);
-                }, 500);
+            var nextIndexSkip = index + 1;
+            if (nextIndexSkip < pointerKeys.length) {
+                setTimeout(function() { openPointer(nextIndexSkip, pointers[pointerKeys[nextIndexSkip]]); }, 500);
+            } else {
+                 dismissTour();
             }
-            return; // No mostrar este pointer si el target no existe
-        }
-
-        // Ajustar el texto del botón 'Siguiente' si es el último paso
-        if (index === pointerKeys.length - 1) {
-            // Buscar el botón 'next' en las opciones y cambiar su etiqueta
-            $.each(options.buttons, function(i, button) {
-                if (button.name === 'next') {
-                    button.label = posBaseTourData.i18n?.finish || 'Finalizar'; // Usar i18n si lo añadimos
-                    return false; // Salir del bucle $.each
-                }
-            });
+            return;
         }
 
         // Abrir el pointer asociado al elemento target
+        if ($targetElement.data('wp-pointer')) {
+             $targetElement.pointer('destroy');
+        }
         $targetElement.pointer(options).pointer('open');
         console.log('POS Tour: Abriendo paso ' + (index + 1) + ' apuntando a ' + pointerData.target);
 
     } // Fin de openPointer
 
-    // Función para marcar el tour como visto (implementación futura con AJAX)
-    /*
+    // Función para marcar el tour como visto (implementación con AJAX)
     function dismissTour() {
-        console.log('POS Tour: Dismissing tour...');
+        if (dismissingTour) { return; }
+        if (typeof posBaseTourData === 'undefined' || !posBaseTourData.ajax_url || !posBaseTourData.nonce) {
+            console.error('POS Tour: Faltan datos AJAX para descartar.');
+            return;
+        }
+        dismissingTour = true;
+        console.log('POS Tour: Dismissing tour via AJAX...');
         $.post(posBaseTourData.ajax_url, {
-            action: 'pos_base_dismiss_tour', // Nombre de la acción AJAX en PHP
-            _ajax_nonce: posBaseTourData.nonce // Nonce de seguridad
+            action: 'pos_base_dismiss_tour',
+            _ajax_nonce: posBaseTourData.nonce
         })
         .done(function(response) {
-            if(response.success) {
-                console.log('POS Tour: Dismissed successfully.');
-            } else {
-                console.error('POS Tour: Failed to dismiss.', response);
-            }
+            if(response && response.success) { console.log('POS Tour: Dismissed successfully via AJAX.'); }
+            else { console.error('POS Tour: Failed to dismiss via AJAX.', response); }
         })
-        .fail(function() {
-            console.error('POS Tour: AJAX request failed.');
+        .fail(function(jqXHR, textStatus, errorThrown) { console.error('POS Tour: AJAX request failed.', textStatus, errorThrown); })
+        .always(function() {
+            console.log('POS Tour: AJAX dismiss call finished.');
         });
     }
-    */
+
 
     // --- Ejecución Principal ---
     $(document).ready(function() {
         // Verificar si los datos del tour están disponibles
-        if (typeof posBaseTourData === 'undefined' || typeof posBaseTourData.pointers === 'undefined') {
-            console.log('POS Tour: No tour data found.');
-            return; // No hacer nada si no hay datos
+        if (typeof posBaseTourData === 'undefined' || typeof posBaseTourData.pointers === 'undefined' || $.isEmptyObject(posBaseTourData.pointers)) {
+            console.log('POS Tour: No tour data found or pointers object is empty.');
+            return;
         }
 
         // Obtener los pointers y sus claves (IDs)
-        window.pointers = posBaseTourData.pointers; // Hacer global para fácil acceso en callbacks
-        window.pointerKeys = Object.keys(pointers); // Obtener ['pos_step_1', 'pos_step_2', ...]
+        window.pointers = posBaseTourData.pointers;
+        window.pointerKeys = Object.keys(pointers);
 
         // Si hay pasos definidos, iniciar el tour abriendo el primer paso
         if (pointerKeys.length > 0) {
-            // Esperar un poco para asegurar que la interfaz esté cargada
             setTimeout(function() {
                 openPointer(0, pointers[pointerKeys[0]]);
-            }, 800); // Ajustar este tiempo si es necesario
+            }, 800);
+        } else {
+            console.log('POS Tour: No pointer steps defined.');
         }
-    });
+
+        // --- MANEJO DE CLICS EN BOTONES (DELEGADO - ¡LA SOLUCIÓN!) ---
+        // Escuchar clics en el documento, pero solo actuar si el origen es un botón DENTRO de un pointer
+        // O el botón de cierre nativo (X)
+        $(document).on('click', '.wp-pointer-content .button, .wp-pointer-close', function(event) {
+            event.preventDefault();
+            event.stopPropagation(); // Detener propagación para evitar conflictos
+
+            var $clickedElement = $(this);
+            // Encontrar el tooltip del pointer
+            var $pointer = $clickedElement.closest('.wp-pointer');
+            if (!$pointer.length) return; // Salir si no estamos dentro de un pointer
+
+            // Encontrar el elemento al que apunta este pointer
+            var $targetElement = null;
+            if (typeof $.find_pointer_target === 'function') {
+                 $targetElement = $.find_pointer_target($pointer);
+            } else {
+                console.warn("POS Tour: $.find_pointer_target no disponible.");
+            }
+
+            // Cerrar el pointer actual (siempre que se haga clic en un botón o la X)
+            if ($targetElement && $targetElement.length) {
+                 console.log('POS Tour: Cerrando pointer asociado a:', $targetElement);
+                 try { $targetElement.pointer('close'); } catch(e) { console.error("Error closing pointer via target:", e); }
+            } else {
+                console.warn('POS Tour: No se pudo encontrar el target del pointer actual para cerrarlo. Intentando remover tooltip.');
+                 try { $pointer.remove(); } catch(e){} // Como último recurso, quitar el tooltip
+            }
+
+            console.log('POS Tour: Click delegado detectado en:', $clickedElement.attr('class'));
+
+            // Determinar qué botón/elemento se presionó
+            if ($clickedElement.hasClass('pos-tour-next-btn')) {
+                // Botón Siguiente/Finalizar
+                var nextIndex = currentTourIndex + 1;
+                if (nextIndex < pointerKeys.length) {
+                    // Abrir siguiente paso
+                    console.log('POS Tour: Abriendo siguiente paso:', nextIndex);
+                    setTimeout(function() {
+                        openPointer(nextIndex, pointers[pointerKeys[nextIndex]]);
+                    }, 50); // Pequeña demora
+                } else {
+                    // Era el último paso (Finalizar)
+                    console.log('POS Tour: Finalizando tour.');
+                    dismissTour();
+                }
+            } else if ($clickedElement.hasClass('pos-tour-close-btn') || $clickedElement.hasClass('wp-pointer-close')) {
+                // Botón Cerrar (el nuestro) O el botón 'X' nativo
+                console.log('POS Tour: Cerrando tour (botón nuestro o X).');
+                dismissTour();
+            }
+        });
+        // --- FIN MANEJO DE CLICS ---
+
+    }); // Fin document ready
 
 }(jQuery));
