@@ -463,6 +463,7 @@ function pos_base_api_search_products( WP_REST_Request $request ) {
 
 /**
  * Callback API: Buscar clientes.
+ * MODIFICADO: Prioriza búsqueda por teléfono si el término parece un número.
  */
 function pos_base_api_search_customers( WP_REST_Request $request ) {
     // Obtener parámetros validados
@@ -471,17 +472,37 @@ function pos_base_api_search_customers( WP_REST_Request $request ) {
 
     error_log('POS Base DEBUG: Entrando en pos_base_api_search_customers. Search: "' . $search_term . '", PerPage: ' . $per_page);
 
-    // --- Construir argumentos para WP_User_Query ---
+    // --- INICIO: LÓGICA CONDICIONAL DE BÚSQUEDA ---
     $args = array(
         'number' => $per_page, // Número de resultados
-        'search' => '*' . esc_attr( $search_term ) . '*', // Buscar en campos de usuario
-        'search_columns' => array( // Columnas donde buscar
+        'orderby' => 'display_name', // Ordenar por nombre visible
+        'order' => 'ASC',
+        // Podríamos añadir 'role' => 'customer' si solo queremos clientes
+    );
+
+    // Comprobar si el término de búsqueda parece un número de teléfono
+    // (Permite dígitos, espacios, +, -, (, ) )
+    if ( preg_match('/^[\d\s\+\(\)-]+$/', $search_term) ) {
+        error_log('POS Base DEBUG: Search term looks like a phone number. Querying meta only.');
+        // Si parece teléfono, buscar SOLO en el campo meta 'billing_phone'
+        $args['meta_query'] = array(
+            array(
+                'key'     => 'billing_phone',
+                'value'   => $search_term,
+                'compare' => 'LIKE' // Usar LIKE para flexibilidad con espacios/formato
+            ),
+        );
+    } else {
+        error_log('POS Base DEBUG: Search term is general. Querying standard fields and meta.');
+        // Si no parece teléfono, usar la búsqueda general original
+        $args['search'] = '*' . esc_attr( $search_term ) . '*'; // Buscar en campos de usuario
+        $args['search_columns'] = array( // Columnas estándar donde buscar
             'user_login',
             'user_nicename',
             'user_email',
             'display_name',
-        ),
-        'meta_query' => array( // Buscar también en metadatos (nombre, apellido, teléfono)
+        );
+        $args['meta_query'] = array( // Buscar también en metadatos (nombre, apellido, teléfono como fallback)
             'relation' => 'OR',
             array(
                 'key'     => 'first_name',
@@ -493,17 +514,16 @@ function pos_base_api_search_customers( WP_REST_Request $request ) {
                 'value'   => $search_term,
                 'compare' => 'LIKE'
             ),
+            // Mantenemos la búsqueda por teléfono aquí también por si alguien busca
+            // un teléfono junto con texto, aunque la condición anterior lo prioriza.
             array(
                 'key'     => 'billing_phone',
                 'value'   => $search_term,
                 'compare' => 'LIKE'
             ),
-        ),
-        'orderby' => 'display_name', // Ordenar por nombre visible
-        'order' => 'ASC',
-        // Podríamos añadir 'role' => 'customer' si solo queremos clientes
-    );
-    // --- Fin construcción argumentos ---
+        );
+    }
+    // --- FIN: LÓGICA CONDICIONAL DE BÚSQUEDA ---
 
     error_log('POS Base DEBUG: WP_User_Query args: ' . print_r($args, true));
 
@@ -798,6 +818,7 @@ function pos_base_api_validate_coupon( WP_REST_Request $request ) {
  * Callback API: Crear un pedido.
  * Maneja la creación del pedido, asignación de items, precios, metadatos,
  * cupones, y la actualización del estado del perfil de streaming si aplica.
+ * MODIFICADO: Añade validación de perfil solo si el módulo streaming está activo.
  */
 function pos_base_api_create_order( WP_REST_Request $request ) {
     // Parámetros ya validados/sanitizados por 'args'
@@ -907,11 +928,17 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         error_log('POS Base DEBUG: Método de pago establecido para pedido ' . $order_id . ': ' . $payment_method_id);
 
         // --- Metadatos del Pedido (incluye los de suscripción base y captura de perfil) ---
+        $sale_type_from_meta = null; // Variable para guardar el tipo de venta de los metadatos
         if ( ! empty( $meta_data_input ) ) {
             foreach ( $meta_data_input as $meta_item ) {
                 if ( isset( $meta_item['key'] ) && isset( $meta_item['value'] ) ) {
                     $order->update_meta_data( $meta_item['key'], $meta_item['value'] );
                     error_log('POS Base DEBUG: Metadato añadido/actualizado en pedido ' . $order_id . ': ' . $meta_item['key'] . ' = ' . print_r($meta_item['value'], true));
+
+                    // Guardar el tipo de venta si viene en los metadatos
+                    if ( $meta_item['key'] === '_pos_sale_type' ) {
+                        $sale_type_from_meta = $meta_item['value'];
+                    }
 
                     // --- INICIO: CAPTURAR Y VALIDAR PROFILE ID ---
                     if ( $meta_item['key'] === '_pos_assigned_profile_id' ) {
@@ -925,8 +952,7 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
                                 error_log('[Streaming Order DEBUG] Perfil ID ' . $assigned_profile_id . ' válido y disponible encontrado en meta.');
                             } else {
                                  error_log('[Streaming Order WARNING] Perfil ID ' . $profile_id_temp . ' encontrado pero su estado es "' . $current_status . '", no "available". No se asignará.');
-                                 // Podríamos lanzar una excepción aquí para detener la venta si es crítico
-                                 // throw new Exception( sprintf( __( 'El perfil seleccionado (ID %d) ya no está disponible.', 'pos-streaming' ), $profile_id_temp ) );
+                                 // No lanzar excepción aquí todavía, validar después del bucle
                             }
                         } else {
                              error_log('[Streaming Order WARNING] _pos_assigned_profile_id recibido (' . $meta_item['value'] . ') pero no es un ID de perfil válido.');
@@ -937,6 +963,24 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
             }
         }
         // --- Fin metadatos ---
+
+        // --- INICIO: VALIDACIÓN REQUERIDA DE PERFIL STREAMING (SI APLICA) ---
+        // Obtener si el módulo está activo
+        $active_modules = get_option( 'pos_base_active_modules', [] );
+        $is_streaming_active = ( is_array( $active_modules ) && in_array( 'streaming', $active_modules, true ) );
+
+        // Validar SOLO si el módulo está activo Y es una venta de suscripción Y NO se encontró un perfil válido
+        if ( $is_streaming_active && $sale_type_from_meta === 'subscription' && empty( $assigned_profile_id ) ) {
+            // Lanzar el error que detendrá la creación del pedido
+            error_log('[Streaming Order ERROR] Venta de suscripción requiere perfil, pero no se proporcionó o no es válido/disponible. Módulo activo: ' . ($is_streaming_active ? 'Sí' : 'No'));
+            // Devolver un WP_Error detiene la ejecución y envía el mensaje al JS
+            return new WP_Error(
+                'profile_required', // Código de error único
+                __( 'Debes seleccionar un perfil disponible para la suscripción.', 'pos-streaming' ), // Mensaje de error
+                array( 'status' => 400 ) // Código de estado HTTP (Bad Request)
+            );
+        }
+        // --- FIN: VALIDACIÓN REQUERIDA DE PERFIL STREAMING ---
 
         // Guardar pedido TEMPRANO para poder aplicar cupones y tener metadatos guardados
         $order->save();
@@ -968,7 +1012,8 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         error_log('POS Base DEBUG: Total final calculado y forzado para pedido ' . $order_id . ': ' . $final_total);
 
         // --- INICIO: ACTUALIZAR ESTADO DEL PERFIL ASIGNADO ---
-        if ( $assigned_profile_id ) {
+        // Solo actualizar si el módulo está activo Y se asignó un perfil
+        if ( $is_streaming_active && $assigned_profile_id ) {
             // Actualizar el metadato '_pos_profile_status' del CPT 'pos_profile'
             $update_result = update_post_meta( $assigned_profile_id, '_pos_profile_status', 'assigned' );
 
@@ -987,8 +1032,8 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
 
 
         // Estado Final y Pago
-        $sale_type = $order->get_meta('_pos_sale_type'); // Leer el meta que acabamos de guardar
-        $final_status = ($sale_type === 'credit') ? 'on-hold' : 'completed'; // Ejemplo: 'on-hold' para crédito
+        // Usar $sale_type_from_meta que ya obtuvimos
+        $final_status = ($sale_type_from_meta === 'credit') ? 'on-hold' : 'completed'; // Ejemplo: 'on-hold' para crédito
 
         $order->update_status( $final_status, __( 'Pedido procesado desde POS.', 'pos-base' ), false ); // No notificar al cliente por defecto
         error_log('POS Base DEBUG: Estado del pedido ' . $order_id . ' actualizado a: ' . $final_status);
@@ -1025,6 +1070,7 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
             wp_delete_post( $order->get_id(), true );
             error_log('POS Base DEBUG: Pedido parcialmente creado ' . $order->get_id() . ' eliminado debido a error.');
         }
+        // Devolver el mensaje de la excepción como WP_Error
         return new WP_Error( 'rest_order_creation_failed', $e->getMessage(), array( 'status' => 500 ) );
     }
 } // Fin de pos_base_api_create_order

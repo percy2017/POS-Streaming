@@ -61,7 +61,7 @@ function pos_base_add_order_metabox( $post_type, $post ) {
 
 /**
  * Muestra el contenido del metabox de POS Base en la pantalla de edición de pedidos.
- * Muestra el tipo de venta, detalles de suscripción base y, si aplica,
+ * Muestra el tipo de venta, detalles de suscripción base y, si aplica Y el módulo está activo,
  * el perfil y la cuenta de streaming asignados.
  *
  * @param WP_Post|WC_Order|object $post_or_order_object Objeto del post o del pedido.
@@ -142,64 +142,85 @@ function pos_base_order_metabox_callback( $post_or_order_object ) {
              echo '<p><em>' . esc_html__( 'No se encontraron detalles de suscripción base.', 'pos-base' ) . '</em></p>';
         }
 
-        // --- INICIO: Mostrar Detalles del Perfil y Cuenta Asignados ---
-        echo '<hr style="margin: 10px 0;">';
-        echo '<h4>' . esc_html__( 'Detalles Streaming Asignado:', 'pos-streaming' ) . '</h4>'; // Usar text domain del módulo
+        // --- INICIO: VERIFICACIÓN DEL MÓDULO STREAMING ---
+        $active_modules = get_option( 'pos_base_active_modules', [] );
+        $is_streaming_active = ( is_array( $active_modules ) && in_array( 'streaming', $active_modules, true ) );
 
-        if ( $assigned_profile_id && $assigned_profile_id > 0 && get_post_type($assigned_profile_id) === 'pos_profile' ) {
-            // Obtener detalles del perfil
-            $profile_title = get_the_title( $assigned_profile_id );
-            $profile_edit_link = get_edit_post_link( $assigned_profile_id );
-            $parent_account_id = get_post_meta( $assigned_profile_id, '_pos_profile_parent_account_id', true );
+        // SOLO mostrar la sección de streaming asignado SI el módulo está activo
+        if ( $is_streaming_active ) {
+        // --- FIN: VERIFICACIÓN DEL MÓDULO STREAMING ---
 
-            // Mostrar Perfil
-            echo '<p><strong>' . esc_html__( 'Perfil Asignado:', 'pos-streaming' ) . '</strong> ';
-            if ( $profile_edit_link ) {
-                echo '<a href="' . esc_url( $profile_edit_link ) . '">' . esc_html( $profile_title ?: sprintf( __( 'Perfil ID %d', 'pos-streaming' ), $assigned_profile_id ) ) . '</a>';
+            // --- INICIO: Mostrar Detalles del Perfil y Cuenta Asignados ---
+            echo '<hr style="margin: 10px 0;">';
+            echo '<h4>' . esc_html__( 'Detalles Streaming Asignado:', 'pos-streaming' ) . '</h4>'; // Usar text domain del módulo
+
+            // Añadir logs de depuración (si aún los tienes, está bien)
+            error_log('[Metabox DEBUG] Order ID: ' . $order_id . ' - Intentando leer _pos_assigned_profile_id.');
+            error_log('[Metabox DEBUG] Valor de $assigned_profile_id recuperado: ' . print_r($assigned_profile_id, true));
+            if ($assigned_profile_id && $assigned_profile_id > 0) {
+                $post_type_check = get_post_type($assigned_profile_id);
+                error_log('[Metabox DEBUG] Resultado de get_post_type(' . $assigned_profile_id . '): ' . print_r($post_type_check, true));
             } else {
-                echo esc_html( $profile_title ?: sprintf( __( 'Perfil ID %d', 'pos-streaming' ), $assigned_profile_id ) );
+                error_log('[Metabox DEBUG] $assigned_profile_id está vacío o no es > 0.');
             }
-            echo '</p>';
 
-            // Mostrar Cuenta Padre (si existe)
-            if ( $parent_account_id && $parent_account_id > 0 && get_post_type($parent_account_id) === 'pos_account' ) {
-                $account_title = get_the_title( $parent_account_id );
-                $account_edit_link = get_edit_post_link( $parent_account_id );
-                $provider_key = get_post_meta( $parent_account_id, '_pos_account_provider', true );
-                $provider_label = '';
+            // La condición IF original para mostrar detalles o el mensaje "No se asignó..."
+            if ( $assigned_profile_id && $assigned_profile_id > 0 && get_post_type($assigned_profile_id) === 'pos_profile' ) {
+                // Obtener detalles del perfil
+                $profile_title = get_the_title( $assigned_profile_id );
+                $profile_edit_link = get_edit_post_link( $assigned_profile_id );
+                $parent_account_id = get_post_meta( $assigned_profile_id, '_pos_profile_parent_account_id', true );
 
-                // Obtener etiqueta legible del proveedor (repetimos la lista o usamos helper)
-                $supported_providers = array(
-                    'netflix'     => 'Netflix', 'disney_plus' => 'Disney+', 'hbo_max' => 'HBO Max (Max)',
-                    'prime_video' => 'Amazon Prime Video', 'spotify' => 'Spotify', 'youtube_premium' => 'YouTube Premium',
-                    'other'       => __( 'Otro', 'pos-streaming' ),
-                );
-                if ( isset($supported_providers[$provider_key]) ) {
-                    $provider_label = $supported_providers[$provider_key];
-                } elseif ($provider_key) {
-                    $provider_label = ucfirst(str_replace('_', ' ', $provider_key)); // Fallback
-                }
-
-                echo '<p><strong>' . esc_html__( 'Cuenta Padre:', 'pos-streaming' ) . '</strong> ';
-                if ( $account_edit_link ) {
-                    echo '<a href="' . esc_url( $account_edit_link ) . '">' . esc_html( $account_title ?: sprintf( __( 'Cuenta ID %d', 'pos-streaming' ), $parent_account_id ) ) . '</a>';
+                // Mostrar Perfil
+                echo '<p><strong>' . esc_html__( 'Perfil Asignado:', 'pos-streaming' ) . '</strong> ';
+                if ( $profile_edit_link ) {
+                    echo '<a href="' . esc_url( $profile_edit_link ) . '">' . esc_html( $profile_title ?: sprintf( __( 'Perfil ID %d', 'pos-streaming' ), $assigned_profile_id ) ) . '</a>';
                 } else {
-                    echo esc_html( $account_title ?: sprintf( __( 'Cuenta ID %d', 'pos-streaming' ), $parent_account_id ) );
-                }
-                if ( $provider_label ) {
-                     echo ' <span style="color: #777;">(' . esc_html($provider_label) . ')</span>';
+                    echo esc_html( $profile_title ?: sprintf( __( 'Perfil ID %d', 'pos-streaming' ), $assigned_profile_id ) );
                 }
                 echo '</p>';
 
-            } else {
-                echo '<p><em>' . esc_html__( 'Información de la cuenta padre no encontrada en el perfil.', 'pos-streaming' ) . '</em></p>';
-            }
+                // Mostrar Cuenta Padre (si existe)
+                if ( $parent_account_id && $parent_account_id > 0 && get_post_type($parent_account_id) === 'pos_account' ) {
+                    $account_title = get_the_title( $parent_account_id );
+                    $account_edit_link = get_edit_post_link( $parent_account_id );
+                    $provider_key = get_post_meta( $parent_account_id, '_pos_account_provider', true );
+                    $provider_label = '';
 
-        } else {
-            // Si no hay _pos_assigned_profile_id o no es válido
-            echo '<p><em>' . esc_html__( 'No se asignó un perfil de streaming específico a esta venta.', 'pos-streaming' ) . '</em></p>';
-        }
-        // --- FIN: Mostrar Detalles del Perfil y Cuenta Asignados ---
+                    // Obtener etiqueta legible del proveedor (repetimos la lista o usamos helper)
+                    $supported_providers = array(
+                        'netflix'     => 'Netflix', 'disney_plus' => 'Disney+', 'hbo_max' => 'HBO Max (Max)',
+                        'prime_video' => 'Amazon Prime Video', 'spotify' => 'Spotify', 'youtube_premium' => 'YouTube Premium',
+                        'other'       => __( 'Otro', 'pos-streaming' ),
+                    );
+                    if ( isset($supported_providers[$provider_key]) ) {
+                        $provider_label = $supported_providers[$provider_key];
+                    } elseif ($provider_key) {
+                        $provider_label = ucfirst(str_replace('_', ' ', $provider_key)); // Fallback
+                    }
+
+                    echo '<p><strong>' . esc_html__( 'Cuenta Padre:', 'pos-streaming' ) . '</strong> ';
+                    if ( $account_edit_link ) {
+                        echo '<a href="' . esc_url( $account_edit_link ) . '">' . esc_html( $account_title ?: sprintf( __( 'Cuenta ID %d', 'pos-streaming' ), $parent_account_id ) ) . '</a>';
+                    } else {
+                        echo esc_html( $account_title ?: sprintf( __( 'Cuenta ID %d', 'pos-streaming' ), $parent_account_id ) );
+                    }
+                    if ( $provider_label ) {
+                         echo ' <span style="color: #777;">(' . esc_html($provider_label) . ')</span>';
+                    }
+                    echo '</p>';
+
+                } else {
+                    echo '<p><em>' . esc_html__( 'Información de la cuenta padre no encontrada en el perfil.', 'pos-streaming' ) . '</em></p>';
+                }
+
+            } else {
+                // Si no hay _pos_assigned_profile_id o no es válido
+                echo '<p><em>' . esc_html__( 'No se asignó un perfil de streaming específico a esta venta.', 'pos-streaming' ) . '</em></p>';
+            }
+            // --- FIN: Mostrar Detalles del Perfil y Cuenta Asignados ---
+
+        } // <-- Llave de cierre para el if ( $is_streaming_active )
 
     } // Fin if ($sale_type === 'subscription')
 

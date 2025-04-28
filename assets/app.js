@@ -945,158 +945,162 @@ jQuery(function ($) {
         console.log('Tipo de venta cambiado a:', selectedType);
     }
 
-    function handleCompleteSale() {
-        if (isLoadingCheckoutAction || completeSaleButton.prop('disabled')) {
-            console.warn("Checkout en progreso o botón deshabilitado.");
-            return;
-        }
-
-        // --- Validaciones Iniciales ---
-        if (cart.length === 0) {
-            if (typeof Swal !== 'undefined') Swal.fire('Error', 'El carrito está vacío.', 'error');
-            return;
-        }
-        if (!currentCustomerId) {
-            // Permitir venta como invitado si currentCustomerId es null o 0
-                if (currentCustomerId !== 0 && currentCustomerId !== null) {
-                    if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se ha seleccionado un cliente.', 'error');
-                    return;
-                }
-                console.log("Procediendo con venta como invitado (Customer ID: 0)");
-                currentCustomerId = 0; // Asegurar que sea 0 para invitado
-        }
-        const selectedPaymentMethod = $paymentMethodSelect.val();
-        if (!selectedPaymentMethod) {
-            if (typeof Swal !== 'undefined') Swal.fire('Error', 'Selecciona un método de pago.', 'error');
-            return;
-        }
-        // --- Fin Validaciones Iniciales ---
-
-        const saleType = $saleTypeSelect.val();
-        let subscriptionData = null;
-
-        // --- Validar Campos de Suscripción (si aplica) ---
-        if (saleType === 'subscription') {
-            const title = $subscriptionTitle.val().trim();
-            const expiryDate = $subscriptionExpiryDate.val();
-            const color = $subscriptionColor.val();
-            if (!title || !expiryDate) {
-                if (typeof Swal !== 'undefined') Swal.fire('Error', 'Por favor, completa el título y la fecha de vencimiento de la suscripción.', 'error');
-                // Intentar enfocar el primer campo inválido
-                if (!title) $subscriptionTitle.focus(); else $subscriptionExpiryDate.focus();
-                return; // Detener si faltan datos de suscripción base
-            }
-            subscriptionData = { title: title, expiry_date: expiryDate, color: color };
-
-            // --- INICIO: VALIDACIÓN DEL PERFIL STREAMING ---
-            const selectedProfileId = $('#pos-streaming-profile-select').val(); // Obtener ID del select
-            if (!selectedProfileId || selectedProfileId === '') {
-                // Error: Se requiere perfil para suscripción
-                if (typeof Swal !== 'undefined') Swal.fire('Error', 'Debes seleccionar un perfil disponible para la suscripción.', 'error');
-                $('#pos-streaming-profile-select').focus(); // Enfocar el selector
-                return; // Detener la ejecución de completeSale
-            }
-            // Si llegamos aquí, el perfil está seleccionado (lo añadiremos a meta_data más abajo)
-            // --- FIN: VALIDACIÓN DEL PERFIL STREAMING ---
-        }
-        // --- Fin Validar Campos de Suscripción ---
-
-
-        // --- Construir Datos del Pedido ---
-        const orderData = {
-            customer_id: currentCustomerId, // Será 0 si es invitado
-            payment_method: selectedPaymentMethod,
-            payment_method_title: $paymentMethodSelect.find('option:selected').text(),
-            set_paid: (saleType !== 'credit'), // No marcar como pagado si es crédito
-            billing: {}, // Se llenarán en el backend si es cliente existente
-            shipping: {}, // No usado por ahora
-            line_items: cart.map(item => ({
-                product_id: item.product_id,
-                variation_id: item.variation_id || 0,
-                quantity: item.quantity,
-                // 'total' y 'subtotal' se calculan en backend basado en 'price'
-                price: item.current_price // Enviar el precio unitario actual
-            })),
-            meta_data: [
-                { key: '_pos_sale_type', value: saleType } // Guardar siempre el tipo de venta
-            ],
-            coupon_lines: [],
-            pos_order_note: $orderNoteInput.val().trim()
-        };
-
-        // Añadir datos del cupón si existe
-        if (appliedCoupon) {
-            orderData.coupon_lines.push({ code: appliedCoupon.code });
-        }
-
-        // Añadir metadatos de suscripción base si aplica
-        if (subscriptionData) {
-            orderData.meta_data.push({ key: '_pos_subscription_title', value: subscriptionData.title });
-            orderData.meta_data.push({ key: '_pos_subscription_expiry_date', value: subscriptionData.expiry_date });
-            orderData.meta_data.push({ key: '_pos_subscription_color', value: subscriptionData.color });
-        }
-
-        // --- INICIO: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
-        if (saleType === 'subscription') {
-            const selectedProfileId = $('#pos-streaming-profile-select').val();
-            // Ya validamos que no esté vacío arriba, pero volvemos a comprobar por seguridad
-            if (selectedProfileId && selectedProfileId !== '') {
-                orderData.meta_data.push({
-                    key: '_pos_assigned_profile_id',
-                    value: selectedProfileId
-                });
-                console.log('Añadido _pos_assigned_profile_id al pedido:', selectedProfileId);
-            }
-            // No necesitamos un 'else' aquí porque ya validamos antes
-        }
-        // --- FIN: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
-
-        console.log("Datos del pedido a enviar:", orderData);
-        // --- Fin Construir Datos del Pedido ---
-
-
-        // --- Enviar Pedido ---
-        isLoadingCheckoutAction = true;
-        completeSaleButton.prop('disabled', true).text(posBaseParams.i18n?.processing || 'Procesando...');
-        showLoading(posBaseParams.i18n?.creating_order || 'Creando pedido...');
-
-        createOrder(orderData) // Llamar a la función que hace el AJAX POST a /orders
-            .done(response => {
-                hideLoading();
-                if (typeof Swal !== 'undefined') {
-                    Swal.fire({
-                        icon: 'success',
-                        title: posBaseParams.i18n?.order_created_success || '¡Pedido Creado!',
-                        text: `Pedido #${response.id} creado correctamente.`,
-                        showConfirmButton: true
-                    });
-                }
-                resetPOSState(); // Limpiar carrito, cliente, etc.
-                refreshSalesDataTable(); // Actualizar tabla de ventas
-                // --- INICIO: AÑADIR ESTA LÍNEA ---
-                if (calendar && typeof calendar.refetchEvents === 'function') {
-                    console.log('Refrescando eventos del calendario...');
-                    calendar.refetchEvents(); // Vuelve a pedir los eventos al endpoint API
-                } else {
-                    console.warn('Intento de refrescar calendario, pero no está inicializado o no es válido.');
-                }
-     
-            })
-            .fail(error => {
-                hideLoading();
-                console.error("Error creando pedido:", error);
-                const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.order_created_error || 'Error al crear el pedido.';
-                if (typeof Swal !== 'undefined') Swal.fire('Error', errorMsg, 'error');
-                // No resetear estado si falla, para que el usuario pueda intentar de nuevo
-            })
-            .always(() => {
-                isLoadingCheckoutAction = false;
-                completeSaleButton.text(posBaseParams.i18n?.complete_sale || 'Completar Venta');
-                // El estado del botón se actualizará basado en si hay cliente/carrito
-                updateCheckoutButtonState();
-            });
-        // --- Fin Enviar Pedido ---
-    } // Fin handleCompleteSale
+       function handleCompleteSale() {
+           if (isLoadingCheckoutAction || completeSaleButton.prop('disabled')) {
+               console.warn("Checkout en progreso o botón deshabilitado.");
+               return;
+           }
+   
+           // --- Validaciones Iniciales ---
+           if (cart.length === 0) {
+               if (typeof Swal !== 'undefined') Swal.fire('Error', 'El carrito está vacío.', 'error');
+               return;
+           }
+           if (!currentCustomerId) {
+               // Permitir venta como invitado si currentCustomerId es null o 0
+                   if (currentCustomerId !== 0 && currentCustomerId !== null) {
+                       if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se ha seleccionado un cliente.', 'error');
+                       return;
+                   }
+                   console.log("Procediendo con venta como invitado (Customer ID: 0)");
+                   currentCustomerId = 0; // Asegurar que sea 0 para invitado
+           }
+           const selectedPaymentMethod = $paymentMethodSelect.val();
+           if (!selectedPaymentMethod) {
+               if (typeof Swal !== 'undefined') Swal.fire('Error', 'Selecciona un método de pago.', 'error');
+               return;
+           }
+           // --- Fin Validaciones Iniciales ---
+   
+           const saleType = $saleTypeSelect.val();
+           let subscriptionData = null;
+   
+           // --- Validar Campos de Suscripción (si aplica) ---
+           if (saleType === 'subscription') {
+               const title = $subscriptionTitle.val().trim();
+               const expiryDate = $subscriptionExpiryDate.val();
+               const color = $subscriptionColor.val();
+               if (!title || !expiryDate) {
+                   if (typeof Swal !== 'undefined') Swal.fire('Error', 'Por favor, completa el título y la fecha de vencimiento de la suscripción.', 'error');
+                   // Intentar enfocar el primer campo inválido
+                   if (!title) $subscriptionTitle.focus(); else $subscriptionExpiryDate.focus();
+                   return; // Detener si faltan datos de suscripción base
+               }
+               subscriptionData = { title: title, expiry_date: expiryDate, color: color };
+   
+               // --- INICIO: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
+               // Obtener el contenedor del selector (ya lo usamos antes)
+               const $profileSelectorWrap = $('.pos-streaming-profile-selector-wrap');
+               const selectedProfileId = $('#pos-streaming-profile-select').val(); // Obtener ID del select
+   
+               // SOLO validar si el tipo es suscripción Y el selector está visible
+               if ($profileSelectorWrap.is(':visible') && (!selectedProfileId || selectedProfileId === '')) {
+                   // Error: Se requiere perfil para suscripción
+                   if (typeof Swal !== 'undefined') Swal.fire('Error', 'Debes seleccionar un perfil disponible para la suscripción.', 'error');
+                   $('#pos-streaming-profile-select').focus(); // Enfocar el selector
+                   return; // Detener la ejecución de completeSale
+               }
+               // --- FIN: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
+           }
+           // --- Fin Validar Campos de Suscripción ---
+   
+   
+           // --- Construir Datos del Pedido ---
+           const orderData = {
+               customer_id: currentCustomerId, // Será 0 si es invitado
+               payment_method: selectedPaymentMethod,
+               payment_method_title: $paymentMethodSelect.find('option:selected').text(),
+               set_paid: (saleType !== 'credit'), // No marcar como pagado si es crédito
+               billing: {}, // Se llenarán en el backend si es cliente existente
+               shipping: {}, // No usado por ahora
+               line_items: cart.map(item => ({
+                   product_id: item.product_id,
+                   variation_id: item.variation_id || 0,
+                   quantity: item.quantity,
+                   // 'total' y 'subtotal' se calculan en backend basado en 'price'
+                   price: item.current_price // Enviar el precio unitario actual
+               })),
+               meta_data: [
+                   { key: '_pos_sale_type', value: saleType } // Guardar siempre el tipo de venta
+               ],
+               coupon_lines: [],
+               pos_order_note: $orderNoteInput.val().trim()
+           };
+   
+           // Añadir datos del cupón si existe
+           if (appliedCoupon) {
+               orderData.coupon_lines.push({ code: appliedCoupon.code });
+           }
+   
+           // Añadir metadatos de suscripción base si aplica
+           if (subscriptionData) {
+               orderData.meta_data.push({ key: '_pos_subscription_title', value: subscriptionData.title });
+               orderData.meta_data.push({ key: '_pos_subscription_expiry_date', value: subscriptionData.expiry_date });
+               orderData.meta_data.push({ key: '_pos_subscription_color', value: subscriptionData.color });
+           }
+   
+           // --- INICIO: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
+           if (saleType === 'subscription') {
+               const selectedProfileId = $('#pos-streaming-profile-select').val();
+               // Ya validamos que no esté vacío arriba, pero volvemos a comprobar por seguridad
+               if (selectedProfileId && selectedProfileId !== '') {
+                   orderData.meta_data.push({
+                       key: '_pos_assigned_profile_id',
+                       value: selectedProfileId
+                   });
+                   console.log('Añadido _pos_assigned_profile_id al pedido:', selectedProfileId);
+               }
+               // No necesitamos un 'else' aquí porque ya validamos antes
+           }
+           // --- FIN: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
+   
+           console.log("Datos del pedido a enviar:", orderData);
+           // --- Fin Construir Datos del Pedido ---
+   
+   
+           // --- Enviar Pedido ---
+           isLoadingCheckoutAction = true;
+           completeSaleButton.prop('disabled', true).text(posBaseParams.i18n?.processing || 'Procesando...');
+           showLoading(posBaseParams.i18n?.creating_order || 'Creando pedido...');
+   
+           createOrder(orderData) // Llamar a la función que hace el AJAX POST a /orders
+               .done(response => {
+                   hideLoading();
+                   if (typeof Swal !== 'undefined') {
+                       Swal.fire({
+                           icon: 'success',
+                           title: posBaseParams.i18n?.order_created_success || '¡Pedido Creado!',
+                           text: `Pedido #${response.id} creado correctamente.`,
+                           showConfirmButton: true
+                       });
+                   }
+                   resetPOSState(); // Limpiar carrito, cliente, etc.
+                   refreshSalesDataTable(); // Actualizar tabla de ventas
+                   // --- INICIO: AÑADIR ESTA LÍNEA ---
+                   if (calendar && typeof calendar.refetchEvents === 'function') {
+                       console.log('Refrescando eventos del calendario...');
+                       calendar.refetchEvents(); // Vuelve a pedir los eventos al endpoint API
+                   } else {
+                       console.warn('Intento de refrescar calendario, pero no está inicializado o no es válido.');
+                   }
+   
+               })
+               .fail(error => {
+                   hideLoading();
+                   console.error("Error creando pedido:", error);
+                   const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.order_created_error || 'Error al crear el pedido.';
+                   if (typeof Swal !== 'undefined') Swal.fire('Error', errorMsg, 'error');
+                   // No resetear estado si falla, para que el usuario pueda intentar de nuevo
+               })
+               .always(() => {
+                   isLoadingCheckoutAction = false;
+                   completeSaleButton.text(posBaseParams.i18n?.complete_sale || 'Completar Venta');
+                   // El estado del botón se actualizará basado en si hay cliente/carrito
+                   updateCheckoutButtonState();
+               });
+           // --- Fin Enviar Pedido ---
+       } // Fin handleCompleteSale
+   
     
 
     async function loadPaymentMethods() {

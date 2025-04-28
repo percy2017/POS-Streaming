@@ -91,6 +91,13 @@ add_action( 'manage_pos_account_posts_custom_column', 'streaming_display_account
  * Se engancha a 'pos_base_subscription_fields_content'.
  */
 function streaming_add_profile_selector_field() {
+    $active_modules = get_option( 'pos_base_active_modules', [] ); // Obtener array, o vacío si no existe
+
+    // Verificar si 'streaming' está en el array de módulos activos
+    if ( ! is_array( $active_modules ) || ! in_array( 'streaming', $active_modules, true ) ) {
+        // Si el módulo NO está activo, no hacer nada y salir de la función
+        return;
+    }
     ?>
     <p class="form-field form-field-wide pos-streaming-profile-selector-wrap">
         <label for="pos-streaming-profile-select"><?php esc_html_e( 'Perfil Streaming:', 'pos-streaming' ); ?></label>
