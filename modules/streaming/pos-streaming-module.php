@@ -72,30 +72,6 @@ function streaming_load_textdomain() {
 // Ejecutar después de que el plugin base cargue el suyo (prioridad > 10)
 add_action( 'plugins_loaded', 'streaming_load_textdomain', 15 );
 
-
-// --- Opcional: Hooks de Activación/Desactivación Específicos del Módulo ---
-// Estos son más complejos de implementar correctamente dentro de un módulo cargado dinámicamente.
-// Por ahora, confiaremos en los hooks del plugin base. Si necesitamos lógica específica
-// (ej: crear tablas, verificar dependencias), lo abordaremos más adelante.
-/*
-function streaming_module_activate() {
-    // Código a ejecutar cuando el módulo se activa (o el plugin base se activa y este módulo está activo)
-    streaming_register_cpts(); // Es importante registrar CPTs antes de flush
-    flush_rewrite_rules();
-}
-
-function streaming_module_deactivate() {
-    // Código a ejecutar cuando el módulo se desactiva (o el plugin base se desactiva)
-    flush_rewrite_rules();
-}
-// El registro de estos hooks (register_activation_hook) es complicado desde un archivo incluido.
-// Una técnica es hacerlo condicionalmente desde el archivo base (pos-base.php)
-// si el módulo está activo, pero lo dejaremos para más adelante si es necesario.
-*/
-/**
- * Añade manualmente los submenús para los CPTs del módulo streaming.
- * Se engancha a 'admin_menu'.
- */
 function streaming_add_admin_submenus() {
     // Añadir submenú para Cuentas Streaming
     add_submenu_page(
@@ -119,8 +95,6 @@ function streaming_add_admin_submenus() {
         26                                   // Posición (opcional)
     );
 }
-// Enganchar esta función al hook admin_menu
-// Usar una prioridad > 10 asegura que se ejecute después de que pos-page.php cree el menú principal y el submenú POS.
 add_action( 'admin_menu', 'streaming_add_admin_submenus', 20 );
 
 ?>

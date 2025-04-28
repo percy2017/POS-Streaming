@@ -86,8 +86,6 @@ function pos_base_init() {
     // --- Hook para Metabox de Pedido (Funcionalidad BASE) ---
     add_action( 'add_meta_boxes', 'pos_base_add_order_metabox', 10, 2 );
 
-    // --- Hooks para que los módulos se registren (se añadirán en los módulos) ---
-
 }
 add_action( 'plugins_loaded', 'pos_base_init' );
 
@@ -187,31 +185,6 @@ function pos_base_enqueue_assets( $hook_suffix ) {
         filemtime( POS_BASE_PLUGIN_DIR . 'assets/app.js' ),
         true
     );
-
-    /* --- INICIO: BLOQUE DEL TOUR ELIMINADO ---
-    // --- ENCOLAR SCRIPT DEL TOUR Y PASAR DATOS ---
-    // if ( $load_tour ) {
-    //     wp_enqueue_script(
-    //         'pos-base-tour',
-    //         POS_BASE_ASSETS_URL . 'js/pos-tour.js',
-    //         array( 'jquery', 'wp-pointer' ),
-    //         filemtime( POS_BASE_PLUGIN_DIR . 'assets/js/pos-tour.js' ),
-    //         true
-    //     );
-    //
-    //     // Obtener los datos de los pointers definidos en pos-tour.php
-    //     // if ( function_exists('pos_base_get_tour_pointers') && ! empty( $tour_pointers = pos_base_get_tour_pointers() ) ) {
-    //     //     wp_localize_script(
-    //     //         'pos-base-tour',
-    //     //         'posBaseTourData',
-    //     //         array(
-    //     //             'pointers' => $tour_pointers,
-    //     //         )
-    //     //     );
-    //     // }
-    // }
-    // --- FIN SCRIPT DEL TOUR ---
-    */ // --- FIN: BLOQUE DEL TOUR ELIMINADO ---
 
 
     // Localize Script Base
