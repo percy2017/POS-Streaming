@@ -99,6 +99,7 @@ add_action( 'admin_init', 'pos_whatsapp_register_settings_v2' );
  * Muestra texto introductorio para la sección de WhatsApp (opcional).
  */
 function pos_whatsapp_section_callback_v2() {
+    echo '<hr style="margin: 25px 0 15px 0; border: 0; border-top: 1px solid #ccd0d4;">';
     echo '<p>' . esc_html__( 'Introduce aquí los datos para el botón de contacto por WhatsApp.', 'pos-whatsapp' ) . '</p>';
 }
 

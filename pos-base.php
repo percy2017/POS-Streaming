@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) or die( '¡No tienes permiso para acceder aquí!' );
 
 
 // --- Constantes del Plugin ---
-define( 'POS_BASE_VERSION', '1.1.0' ); // Versión del plugin base
+define( 'POS_BASE_VERSION', '1.1.0' );
 define( 'POS_BASE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'POS_BASE_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'POS_BASE_PLUGIN_FILE', __FILE__ );
@@ -67,8 +67,6 @@ function pos_base_init() {
             }
         }
     }
-    // --- Fin Carga Dinámica de Módulos ---
-
 
     // --- Carga del Text Domain para Traducciones del Plugin Base ---
     load_plugin_textdomain(
@@ -156,7 +154,6 @@ function pos_base_enqueue_assets( $hook_suffix ) {
     } else {
         error_log('[DEBUG Select2 Enqueue] ERROR: Bundled Select2 files not found in plugin vendor directory.');
     }
-    // --- FIN: Encolar Select2 (Bundled) ---
 
     // Estilos Vendor (comunes)
     wp_enqueue_style( 'pos-base-datatables', POS_BASE_ASSETS_URL . 'vendor/datatables/datatables.min.css', array(), '1.13.8' );

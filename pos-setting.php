@@ -56,8 +56,6 @@ function pos_base_modules_section_callback() {
 
 /**
  * Detecta módulos en la carpeta /modules y renderiza los checkboxes.
- * Callback para add_settings_field.
- * MODIFICADO: Añade wrapper div y ajusta HTML para CSS.
  */
 function pos_base_render_modules_field() {
     $active_modules = get_option( 'pos_base_active_modules', [] );
@@ -112,8 +110,6 @@ function pos_base_render_modules_field() {
 
 /**
  * Sanitiza el array de módulos activos antes de guardarlo en la BD.
- * Callback para register_setting.
- * (Sin cambios necesarios aquí)
  */
 function pos_base_sanitize_active_modules( $input ) {
     // ... (código de sanitización sin cambios) ...
@@ -147,7 +143,6 @@ function pos_base_sanitize_active_modules( $input ) {
     return $sanitized_output;
 }
 
-// --- NUEVA FUNCIÓN PARA ESTILOS CSS ---
 /**
  * Añade CSS inline para estilizar los checkboxes en la página de configuración.
  *

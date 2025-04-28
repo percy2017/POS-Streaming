@@ -9,52 +9,39 @@ defined( 'ABSPATH' ) or die( '¡No tienes permiso para acceder aquí!' );
 /**
  * Añade la página del menú para el POS Base y sus submenús.
  */
-function pos_base_add_admin_menu() { // <--- RENOMBRADA
+function pos_base_add_admin_menu() { 
 
     // Menú Principal
     add_menu_page(
         __( 'POS Base', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
         __( 'POS Base', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
         'manage_woocommerce',                   // Capacidad
-        'pos-base',                             // <--- NUEVO SLUG PRINCIPAL
-        'pos_base_render_page',                 // <--- FUNCIÓN RENOMBRADA
+        'pos-base',                             
+        'pos_base_render_page',                 
         'dashicons-store',                      // Icono
         58                                      // Posición
     );
 
     // Submenú: POS (apunta a la misma página que el menú principal)
     add_submenu_page(
-        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
+        'pos-base',                             
         __( 'Punto de Venta', 'pos-streaming' ),// Título de la página (Mantenemos 'pos-streaming' para contenido)
         __( 'POS', 'pos-streaming' ),           // Título del submenú (Mantenemos 'pos-streaming')
         'manage_woocommerce',                   // Capacidad
-        'pos-base',                             // <--- MISMO SLUG que add_menu_page (Actualizado)
-        'pos_base_render_page'                  // <--- MISMA FUNCIÓN callback (Actualizado)
+        'pos-base',                             
+        'pos_base_render_page'                  
     );
 
     // Submenú: Configuración
     add_submenu_page(
-        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
+        'pos-base',                            
         __( 'Configuración POS', 'pos-base' ),  // Título de la página (Nuevo Text Domain)
         __( 'Configuración', 'pos-base' ),      // Título del submenú (Nuevo Text Domain)
         'manage_options',                       // Capacidad (admin)
-        'pos-base-settings',                    // <--- NUEVO SLUG para esta página
-        'pos_base_render_settings_page'         // <--- FUNCIÓN RENOMBRADA
+        'pos-base-settings',                   
+        'pos_base_render_settings_page'         
     );
 
-    // NOTA: El submenú de Proveedores ('pos_streaming_render_providers_page')
-    // probablemente debería moverse al módulo 'streaming' más adelante.
-    // Por ahora, lo dejamos comentado o lo puedes eliminar si ya no lo necesitas aquí.
-    /*
-    add_submenu_page(
-        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
-        __( 'Proveedores', 'pos-streaming' ),   // Título página (Mantenemos 'pos-streaming')
-        __( 'Proveedores', 'pos-streaming' ),   // Título submenú (Mantenemos 'pos-streaming')
-        'manage_woocommerce',                   // Capacidad
-        'pos-base-providers',                   // <--- NUEVO SLUG (si se mantiene)
-        'pos_base_render_providers_page'        // <--- FUNCIÓN RENOMBRADA (si se mantiene)
-    );
-    */
 }
 add_action( 'admin_menu', 'pos_base_add_admin_menu' ); // <--- FUNCIÓN RENOMBRADA
 
@@ -63,7 +50,7 @@ add_action( 'admin_menu', 'pos_base_add_admin_menu' ); // <--- FUNCIÓN RENOMBRA
  * Renderiza el contenido HTML de la página principal del POS.
  * Incluye estructura de pestañas (tabs).
  */
-function pos_base_render_page() { // <--- RENOMBRADA
+function pos_base_render_page() {
     // Comprobación de seguridad
     if ( ! current_user_can( 'manage_woocommerce' ) ) {
         // Usamos 'pos-base' para este mensaje general de permisos
@@ -71,10 +58,7 @@ function pos_base_render_page() { // <--- RENOMBRADA
     }
 
     ?>
-    <div class="wrap" id="pos-base-app-wrapper"> <?php // ID actualizado si quieres ?>
-        <!-- <h1><?php // echo esc_html__( 'POS Base - Punto de Venta', 'pos-base' ); ?></h1> -->
-
-        <!-- Pestañas de Navegación (Mantenemos 'pos-streaming' para contenido específico) -->
+    <div class="wrap" id="pos-base-app-wrapper">
         <h2 class="nav-tab-wrapper">
             <a href="#pos-tab-pos" class="nav-tab nav-tab-active" data-tab="pos"><?php esc_html_e( 'POS', 'pos-streaming' ); ?></a>
             <a href="#pos-tab-calendar" class="nav-tab" data-tab="calendar"><?php esc_html_e( 'Calendario', 'pos-streaming' ); ?></a>
