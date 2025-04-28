@@ -1,0 +1,126 @@
+/* Styles for POS WhatsApp Floating Button, Product & Checkout Buttons */
+
+#pos-whatsapp-fab-container {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+#pos-whatsapp-fab-button {
+    background-color: #25D366; /* WhatsApp Green */
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 60px;
+    height: 60px;
+    font-size: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+    transition: transform 0.2s ease-in-out;
+}
+
+#pos-whatsapp-fab-button:hover {
+    transform: scale(1.1);
+}
+
+#pos-whatsapp-form-popup {
+    display: none;
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 300px;
+    background-color: white;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    padding: 10px;
+    z-index: 1001;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+#pos-whatsapp-form-popup h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 16px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+#pos-whatsapp-form-popup label {
+    display: block;
+    margin-bottom: 2px;
+    font-weight: bold;
+    font-size: 13px;
+}
+
+#pos-whatsapp-form-popup input[type="text"],
+#pos-whatsapp-form-popup input[type="tel"], /* Se puede quitar si no se usa */
+#pos-whatsapp-form-popup textarea {
+    width: 100%;
+    padding: 6px;
+    margin-bottom: 4px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+#pos-whatsapp-form-popup textarea {
+    resize: vertical;
+}
+
+#pos-whatsapp-form-popup button[type="submit"] {
+    background-color: #128C7E;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    width: 100%;
+    font-size: 14px;
+    margin-top: 5px;
+}
+
+#pos-whatsapp-form-popup button[type="submit"]:hover {
+    background-color: #075E54;
+}
+
+#pos-whatsapp-form-close {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #aaa;
+}
+
+#pos-whatsapp-form-close:hover {
+    color: #333;
+}
+
+/* --- ESTILO BOTÓN PRODUCTO --- */
+.pos-whatsapp-product-button {
+    /* Estilos específicos si se necesitan */
+}
+
+/* --- ESTILO BOTÓN CHECKOUT --- */
+/* Usamos las clases de WC 'button alt' en el HTML, pero podemos añadir estilos específicos si es necesario */
+.pos-whatsapp-checkout-button {
+    /* Ejemplo: background-color: #25D366 !important; */
+}
+
+/* --- FIN ESTILOS --- */
+@media (max-width: 400px) {
+    #pos-whatsapp-form-popup {
+        width: calc(100% - 40px);
+        right: 20px;
+        left: 20px;
+        bottom: 90px;
+    }
+}

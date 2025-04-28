@@ -131,17 +131,6 @@ function pos_base_enqueue_assets( $hook_suffix ) {
         return;
     }
 
-    /* --- INICIO: BLOQUE DEL TOUR ELIMINADO ---
-    // --- CARGAR ASSETS PARA WP-POINTER ---
-    // $load_tour = true; // O la lógica que tuvieras para $load_tour
-    // if ( $load_tour ) {
-    //     wp_enqueue_style( 'wp-pointer' );
-    //     wp_enqueue_script( 'wp-pointer' );
-    // }
-    // --- FIN CARGA ASSETS WP-POINTER ---
-    */ // --- FIN: BLOQUE DEL TOUR ELIMINADO ---
-
-
     // Dependencias Nativas
     add_thickbox();
     wp_enqueue_media();

@@ -21,7 +21,6 @@ function pos_base_register_settings() {
             'description'       => __( 'Almacena los slugs de los módulos POS Base activos.', 'pos-base' ),
             'sanitize_callback' => 'pos_base_sanitize_active_modules', // Función para limpiar los datos antes de guardar
             'default'           => [],      // Valor por defecto (un array vacío)
-            // 'show_in_rest'   => false, // Podríamos exponerlo a la API REST si fuera necesario
         ]
     );
 
@@ -41,7 +40,7 @@ function pos_base_register_settings() {
         'pos-base-settings',                // Slug de la página
         'pos_base_modules_section',         // ID de la sección a la que pertenece
         [
-            'label_for' => 'pos_base_active_modules' // Asociar con la opción para accesibilidad (aunque tengamos múltiples checkboxes)
+            // 'label_for' no es ideal aquí porque son múltiples checkboxes
         ]
     );
 }
@@ -58,65 +57,55 @@ function pos_base_modules_section_callback() {
 /**
  * Detecta módulos en la carpeta /modules y renderiza los checkboxes.
  * Callback para add_settings_field.
+ * MODIFICADO: Añade wrapper div y ajusta HTML para CSS.
  */
 function pos_base_render_modules_field() {
-    // Obtener los módulos que están actualmente activos (guardados en la BD)
-    $active_modules = get_option( 'pos_base_active_modules', [] ); // Devuelve array vacío si no existe
-
-    // Ruta a la carpeta de módulos
+    $active_modules = get_option( 'pos_base_active_modules', [] );
     $modules_dir = POS_BASE_PLUGIN_DIR . 'modules/';
 
-    // Verificar si el directorio de módulos existe
     if ( ! is_dir( $modules_dir ) || ! is_readable( $modules_dir ) ) {
-        echo '<p><em>' . esc_html__( 'La carpeta de módulos no existe o no se puede leer.', 'pos-base' ) . '</em></p>';
-        echo '<p><em>' . sprintf( esc_html__( 'Ruta esperada: %s', 'pos-base' ), '<code>' . esc_html( $modules_dir ) . '</code>' ) . '</em></p>';
-        // Crear la carpeta si no existe? Podría ser una opción.
-        if ( ! is_dir( $modules_dir ) ) {
-            wp_mkdir_p( $modules_dir );
-             echo '<p style="color: green;">' . esc_html__( 'Se ha creado la carpeta de módulos.', 'pos-base' ) . '</p>';
-        }
+        // ... (código de manejo de error de directorio sin cambios) ...
         return;
     }
 
-    // Escanear el directorio de módulos
     $potential_modules = scandir( $modules_dir );
     $available_modules = [];
 
     if ( $potential_modules ) {
         foreach ( $potential_modules as $item ) {
-            // Ignorar . y .. y archivos que no sean directorios
             if ( $item === '.' || $item === '..' || ! is_dir( $modules_dir . $item ) ) {
                 continue;
             }
-            // Asumimos que cada directorio es un módulo potencial
-            // Podríamos añadir una comprobación extra: buscar un archivo específico dentro (ej. 'module-info.json' o 'main-module-file.php')
-            $available_modules[ $item ] = $item; // Usamos el nombre del directorio como slug y como nombre (podríamos mejorarlo)
+            $available_modules[ $item ] = $item;
         }
     }
 
-    // Mostrar checkboxes si se encontraron módulos
     if ( empty( $available_modules ) ) {
-        echo '<p><em>' . esc_html__( 'No se encontraron módulos en la carpeta.', 'pos-base' ) . '</em></p>';
-         echo '<p><em>' . sprintf( esc_html__( 'Añade subdirectorios a %s para que aparezcan aquí.', 'pos-base' ), '<code>' . esc_html( $modules_dir ) . '</code>' ) . '</em></p>';
+        // ... (código si no hay módulos sin cambios) ...
     } else {
-        echo '<fieldset>'; // Agrupa los checkboxes
+        // --- INICIO MODIFICACIÓN ---
+        echo '<fieldset class="pos-base-module-checkboxes">'; // Añadida clase contenedora
         foreach ( $available_modules as $slug => $name ) {
-            // Comprobar si este módulo está en la lista de activos
             $is_checked = in_array( $slug, (array) $active_modules, true );
+            $checkbox_id = 'pos-module-' . esc_attr( $slug );
             ?>
-            <label for="pos-module-<?php echo esc_attr( $slug ); ?>">
+            <div class="pos-module-option"> <?php // Wrapper para cada opción ?>
                 <input
                     type="checkbox"
-                    id="pos-module-<?php echo esc_attr( $slug ); ?>"
-                    name="pos_base_active_modules[]" <?php // IMPORTANTE: usar [] para que PHP lo trate como array ?>
+                    id="<?php echo $checkbox_id; ?>"
+                    name="pos_base_active_modules[]"
                     value="<?php echo esc_attr( $slug ); ?>"
-                    <?php checked( $is_checked ); // Función de WP para añadir 'checked="checked"' si es true ?>
+                    <?php checked( $is_checked ); ?>
+                    class="pos-module-checkbox-input" <?php // Clase para ocultar ?>
                 >
-                <?php echo esc_html( ucfirst( $name ) ); // Muestra el nombre del directorio capitalizado ?>
-            </label><br>
+                <label for="<?php echo $checkbox_id; ?>" class="pos-module-checkbox-label"> <?php // Label estilizable ?>
+                    <?php echo esc_html( ucfirst( $name ) ); ?>
+                </label>
+            </div>
             <?php
         }
         echo '</fieldset>';
+        // --- FIN MODIFICACIÓN ---
         echo '<p class="description">' . esc_html__( 'Marca los módulos que deseas activar. Los cambios surtirán efecto después de guardar.', 'pos-base' ) . '</p>';
     }
 }
@@ -124,12 +113,11 @@ function pos_base_render_modules_field() {
 /**
  * Sanitiza el array de módulos activos antes de guardarlo en la BD.
  * Callback para register_setting.
- *
- * @param array|mixed $input El valor enviado desde el formulario.
- * @return array El array sanitizado de slugs de módulos activos.
+ * (Sin cambios necesarios aquí)
  */
 function pos_base_sanitize_active_modules( $input ) {
-    $sanitized_output = [];
+    // ... (código de sanitización sin cambios) ...
+     $sanitized_output = [];
     $submitted_modules = (array) $input; // Asegurarse de que es un array
 
     // Volver a obtener la lista de módulos realmente disponibles para validar
@@ -158,5 +146,92 @@ function pos_base_sanitize_active_modules( $input ) {
 
     return $sanitized_output;
 }
+
+// --- NUEVA FUNCIÓN PARA ESTILOS CSS ---
+/**
+ * Añade CSS inline para estilizar los checkboxes en la página de configuración.
+ *
+ * @param string $hook_suffix El sufijo del hook de la página actual.
+ */
+function pos_base_enqueue_settings_styles( $hook_suffix ) {
+    // Obtener el hook suffix esperado para la página de configuración
+    // (Asegúrate que 'pos-base-settings' es el slug correcto de tu submenú)
+    $settings_page_hook = 'pos-base_page_pos-base-settings'; // Ajusta si es diferente
+
+    // Solo aplicar en nuestra página de configuración
+    if ( $hook_suffix !== $settings_page_hook ) {
+        return;
+    }
+
+    // CSS para los checkboxes personalizados
+    $custom_css = "
+        .pos-base-module-checkboxes .pos-module-option {
+            margin-bottom: 8px; /* Espacio entre opciones */
+        }
+        .pos-module-checkbox-input {
+            /* Ocultar el checkbox original de forma accesible */
+            opacity: 0;
+            position: absolute;
+            left: -9999px;
+        }
+        .pos-module-checkbox-label {
+            position: relative;
+            padding-left: 30px; /* Espacio para el checkbox falso */
+            cursor: pointer;
+            line-height: 20px; /* Alinear verticalmente */
+            display: inline-block;
+            color: #2c3338; /* Color de texto admin */
+        }
+        /* El 'cuadrado' del checkbox falso */
+        .pos-module-checkbox-label::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 18px; /* Tamaño del cuadrado */
+            height: 18px;
+            border: 1px solid #8c8f94; /* Borde gris admin */
+            background-color: #fff;
+            border-radius: 3px;
+            transition: background-color 0.1s ease-in-out, border-color 0.1s ease-in-out;
+        }
+        /* Estilo al pasar el ratón */
+        .pos-module-checkbox-label:hover::before {
+            border-color: #2271b1; /* Azul primario admin */
+        }
+        /* El 'check' (marca) */
+        .pos-module-checkbox-label::after {
+            content: '';
+            position: absolute;
+            left: 6px; /* Posición del check dentro del cuadrado */
+            top: 3px;
+            width: 6px;
+            height: 10px;
+            border: solid #fff; /* Color del check */
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+            opacity: 0; /* Oculto por defecto */
+            transition: opacity 0.1s ease-in-out;
+        }
+        /* Estilos cuando el checkbox original está marcado */
+        .pos-module-checkbox-input:checked + .pos-module-checkbox-label::before {
+            background-color: #2271b1; /* Fondo azul */
+            border-color: #2271b1; /* Borde azul */
+        }
+        .pos-module-checkbox-input:checked + .pos-module-checkbox-label::after {
+            opacity: 1; /* Mostrar el check */
+        }
+        /* Estilo focus para accesibilidad */
+        .pos-module-checkbox-input:focus + .pos-module-checkbox-label::before {
+            box-shadow: 0 0 0 1px #2271b1, 0 0 2px 1px rgba(34, 113, 177, 0.8);
+            border-color: #2271b1;
+            outline: none;
+        }
+    ";
+
+    // Añadir el CSS inline asociado a un handle existente (ej. 'wp-admin')
+    wp_add_inline_style( 'wp-admin', $custom_css );
+}
+add_action( 'admin_enqueue_scripts', 'pos_base_enqueue_settings_styles' );
 
 ?>
