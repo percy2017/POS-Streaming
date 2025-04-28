@@ -55,14 +55,14 @@ function pos_base_modules_section_callback() {
 }
 
 /**
- * Detecta módulos en la carpeta /modules y renderiza los checkboxes.
+ * Detecta módulos, lee sus cabeceras y renderiza los checkboxes estilizados con descripción.
  */
 function pos_base_render_modules_field() {
     $active_modules = get_option( 'pos_base_active_modules', [] );
     $modules_dir = POS_BASE_PLUGIN_DIR . 'modules/';
 
     if ( ! is_dir( $modules_dir ) || ! is_readable( $modules_dir ) ) {
-        // ... (código de manejo de error de directorio sin cambios) ...
+        echo '<p>' . esc_html__( 'Error: El directorio de módulos no existe o no se puede leer.', 'pos-base' ) . '</p>';
         return;
     }
 
@@ -70,20 +70,45 @@ function pos_base_render_modules_field() {
     $available_modules = [];
 
     if ( $potential_modules ) {
-        foreach ( $potential_modules as $item ) {
-            if ( $item === '.' || $item === '..' || ! is_dir( $modules_dir . $item ) ) {
+        foreach ( $potential_modules as $slug ) {
+            if ( $slug === '.' || $slug === '..' || ! is_dir( $modules_dir . $slug ) ) {
                 continue;
             }
-            $available_modules[ $item ] = $item;
+            // Construir ruta al archivo principal del módulo
+            $module_file = $modules_dir . $slug . '/pos-' . $slug . '-module.php';
+
+            if ( file_exists( $module_file ) && is_readable( $module_file ) ) {
+                // Leer datos de la cabecera del archivo del módulo
+                $module_data = get_file_data( $module_file, array(
+                    'ModuleName'  => 'Module Name', // Nombre estándar
+                    'Description' => 'Description', // Descripción estándar
+                ), 'plugin' ); // 'plugin' es el contexto para leer cabeceras
+
+                // Usar el nombre de la cabecera o el slug como fallback
+                $module_name = ! empty( $module_data['ModuleName'] ) ? $module_data['ModuleName'] : ucfirst( str_replace( '-', ' ', $slug ) );
+                // Usar la descripción de la cabecera o un texto genérico
+                $module_description = ! empty( $module_data['Description'] ) ? $module_data['Description'] : __('Sin descripción disponible.', 'pos-base');
+
+                $available_modules[ $slug ] = [
+                    'name' => $module_name,
+                    'description' => $module_description,
+                ];
+            } else {
+                 // Si el archivo principal no existe, usar el slug como nombre y sin descripción
+                 $available_modules[ $slug ] = [
+                    'name' => ucfirst( str_replace( '-', ' ', $slug ) ),
+                    'description' => __('Archivo principal del módulo no encontrado.', 'pos-base'),
+                 ];
+                 error_log("POS Base Settings: Archivo principal no encontrado para módulo '$slug': $module_file");
+            }
         }
     }
 
     if ( empty( $available_modules ) ) {
-        // ... (código si no hay módulos sin cambios) ...
+        echo '<p>' . esc_html__( 'No se encontraron módulos en la carpeta /modules.', 'pos-base' ) . '</p>';
     } else {
-        // --- INICIO MODIFICACIÓN ---
-        echo '<fieldset class="pos-base-module-checkboxes">'; // Añadida clase contenedora
-        foreach ( $available_modules as $slug => $name ) {
+        echo '<fieldset class="pos-base-module-checkboxes">'; // Contenedor
+        foreach ( $available_modules as $slug => $module_info ) {
             $is_checked = in_array( $slug, (array) $active_modules, true );
             $checkbox_id = 'pos-module-' . esc_attr( $slug );
             ?>
@@ -97,16 +122,17 @@ function pos_base_render_modules_field() {
                     class="pos-module-checkbox-input" <?php // Clase para ocultar ?>
                 >
                 <label for="<?php echo $checkbox_id; ?>" class="pos-module-checkbox-label"> <?php // Label estilizable ?>
-                    <?php echo esc_html( ucfirst( $name ) ); ?>
+                    <span class="pos-module-name"><?php echo esc_html( $module_info['name'] ); ?></span>
+                    <span class="pos-module-description"><?php echo esc_html( $module_info['description'] ); ?></span>
                 </label>
             </div>
             <?php
         }
         echo '</fieldset>';
-        // --- FIN MODIFICACIÓN ---
         echo '<p class="description">' . esc_html__( 'Marca los módulos que deseas activar. Los cambios surtirán efecto después de guardar.', 'pos-base' ) . '</p>';
     }
 }
+
 
 /**
  * Sanitiza el array de módulos activos antes de guardarlo en la BD.

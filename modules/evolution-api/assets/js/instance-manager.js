@@ -17,8 +17,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         return;
     }
-    console.log('[EVO_API_JS] evolutionApiData received:', evolutionApiData);
-
     // --- Desestructurar datos para fácil acceso ---
     const { ajaxurl, nonce, instanceName, i18n } = evolutionApiData;
 
@@ -38,13 +36,16 @@ document.addEventListener('DOMContentLoaded', function() {
     const statusMessageArea = document.getElementById('status-message-area'); // Div para mensajes generales
     const stateSpan = document.getElementById('instance-state-value'); // Span para el estado
     const profilePicImg = document.getElementById('instance-profile-picture'); // <-- AÑADIR ESTA LÍNEA
-    // const widSpan = document.getElementById('instance-wid-value'); // Span para el WID
     const pushnameSpan = document.getElementById('instance-pushname-value'); // Span para el nombre
     const ownerSpan = document.getElementById('instance-owner-value'); // <-- Span para el Owner
     const logListElement = document.getElementById('instance-log-list'); // Lista para el log
     const clearLogButton = document.getElementById('clear-log-button'); // Botón limpiar log
 
-    console.log('[EVO_API_JS] DOM Elements selected.');
+    // --- Deshabilitar botón Eliminar por defecto ---
+    if (deleteButton) {
+        deleteButton.disabled = true;
+        deleteButton.title = i18n.statusLoading || 'Cargando estado...'; // Título inicial
+    }
 
     // --- Variables de Estado y Configuración ---
     let isRefreshingStatus = false; // Flag para evitar solapamiento de refrescos
@@ -58,69 +59,81 @@ document.addEventListener('DOMContentLoaded', function() {
     // Mostrar estado de carga en botones
     function showLoading(button) {
         if (!button) return;
-        console.log('[EVO_API_JS] showLoading for button:', button.id);
         button.disabled = true;
     }
 
     // Ocultar estado de carga en botones
     function hideLoading(button) {
          if (!button) return;
-         console.log('[EVO_API_JS] hideLoading for button:', button.id);
          button.disabled = false;
     }
 
     // Mostrar mensajes generales (éxito/error/advertencia)
     function displayStatusMessage(message, type = 'info') {
-        console.log(`[EVO_API_JS] --- displayStatusMessage function START - Type: ${type}`);
         if (!statusMessageArea) {
-             console.error('[EVO_API_JS] displayStatusMessage: Missing status-message-area DOM element.');
              return;
         }
         // Ocultar spinner de carga inicial si aún está visible
         if (statusLoadingMessage) statusLoadingMessage.style.display = 'none';
         // Mostrar mensaje
         statusMessageArea.innerHTML = `<div class="notice notice-${type} is-dismissible" style="margin: 0;"><p>${message}</p></div>`;
-        console.log(`[EVO_API_JS] --- displayStatusMessage function END - Type: ${type}, Message set: ${message}`);
     }
 
-// Actualizar los detalles específicos de la instancia (Estado, Nombre, Owner, Foto)
-function updateInstanceDetails(state = '-', /* wid eliminado */ pushname = '-', owner = '-', profilePicUrl = null) { // <-- Parámetros actualizados
-     console.log(`[EVO_API_JS] --- updateInstanceDetails START - State: ${state}, Pushname: ${pushname}, Owner: ${owner}, PicURL: ${profilePicUrl ? 'Yes' : 'No'}`); // <-- Log actualizado
+    // Actualizar los detalles específicos de la instancia (Estado, Nombre, Owner, Foto) y el botón Eliminar
+    function updateInstanceDetails(state = '-', pushname = '-', owner = '-', profilePicUrl = null) {
+        console.log(`[EVO_API_JS] --- updateInstanceDetails START - State: ${state}, Pushname: ${pushname}, Owner: ${owner}, PicURL: ${profilePicUrl ? 'Yes' : 'No'}`);
 
-     // Actualizar textos
-     if (stateSpan) stateSpan.textContent = state.toUpperCase();
-     // if (widSpan) widSpan.textContent = wid || '-'; // <-- LÍNEA ELIMINADA
-     if (pushnameSpan) pushnameSpan.textContent = pushname || '-';
-     if (ownerSpan) ownerSpan.textContent = owner || '-';
+        const upperCaseState = state.toUpperCase(); // Convertir a mayúsculas para comparación
 
-     // Actualizar imagen de perfil
-     if (profilePicImg) {
-         if (profilePicUrl) {
-             profilePicImg.src = profilePicUrl;
-             profilePicImg.style.display = 'block'; // Mostrar imagen
-         } else {
-             profilePicImg.src = '#'; // Resetear src
-             profilePicImg.style.display = 'none'; // Ocultar imagen
-         }
-     }
+        // Actualizar textos
+        if (stateSpan) stateSpan.textContent = upperCaseState;
+        if (pushnameSpan) pushnameSpan.textContent = pushname || '-';
+        if (ownerSpan) ownerSpan.textContent = owner || '-';
 
-     // Mostrar el contenedor de detalles si no estaba visible
-     if (instanceDetailsDiv) instanceDetailsDiv.style.display = 'block';
-     // Ocultar mensaje de carga inicial
-     if (statusLoadingMessage) statusLoadingMessage.style.display = 'none';
-     console.log('[EVO_API_JS] --- updateInstanceDetails END ---');
-}
+        // Actualizar imagen de perfil
+        if (profilePicImg) {
+            if (profilePicUrl) {
+                profilePicImg.src = profilePicUrl;
+                profilePicImg.style.display = 'block';
+            } else {
+                profilePicImg.src = '#';
+                profilePicImg.style.display = 'none';
+            }
+        }
+
+        // --- Habilitar/Deshabilitar Botón Eliminar ---
+        if (deleteButton) {
+            // Deshabilitar si el estado es CONNECTED (o cualquier otro estado "activo" que consideres, como 'open')
+            if (upperCaseState === 'CONNECTED' || upperCaseState === 'OPEN') {
+                deleteButton.disabled = true;
+                deleteButton.title = i18n.errorDeleteConnected || 'Debes desconectar la instancia antes de eliminarla.';
+                console.log('[EVO_API_JS] Delete button DISABLED (state is CONNECTED/OPEN).');
+            } else {
+                // Habilitar para otros estados (CLOSED, DISCONNECTED, etc.)
+                deleteButton.disabled = false;
+                // Restaurar el título original o uno genérico para eliminar
+                deleteButton.title = i18n.deleteTitle || 'Eliminar Instancia Permanentemente';
+                console.log('[EVO_API_JS] Delete button ENABLED (state is not CONNECTED/OPEN).');
+            }
+        } else {
+            console.warn('[EVO_API_JS] Delete button not found in updateInstanceDetails.');
+        }
+        // --- Fin Habilitar/Deshabilitar ---
 
 
+        // Mostrar el contenedor de detalles si no estaba visible
+        if (instanceDetailsDiv) instanceDetailsDiv.style.display = 'block';
+        // Ocultar mensaje de carga inicial
+        if (statusLoadingMessage) statusLoadingMessage.style.display = 'none';
+        console.log('[EVO_API_JS] --- updateInstanceDetails END ---');
+    }
 
     // Mostrar el código QR
     function displayQrCode(base64Qr) {
-        console.log('[EVO_API_JS] --- displayQrCode function START ---');
         if (!qrContainer || !qrSection || !qrLoadingMessage) {
              console.error('[EVO_API_JS] displayQrCode: Missing required DOM elements.');
              return;
         }
-        console.log('[EVO_API_JS] displayQrCode - Received base64 data (length):', base64Qr ? base64Qr.length : 'null');
         if (qrLoadingMessage) qrLoadingMessage.style.display = 'none'; // Ocultar 'Generando...'
         qrContainer.innerHTML = '';
         const img = document.createElement('img');

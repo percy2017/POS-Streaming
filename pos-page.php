@@ -13,8 +13,8 @@ function pos_base_add_admin_menu() {
 
     // Menú Principal
     add_menu_page(
-        __( 'POS Base', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
-        __( 'POS Base', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
+        __( 'Punto de Venta', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
+        __( 'Punto de Venta', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
         'manage_woocommerce',                   // Capacidad
         'pos-base',                             
         'pos_base_render_page',                 
@@ -26,7 +26,7 @@ function pos_base_add_admin_menu() {
     add_submenu_page(
         'pos-base',                             
         __( 'Punto de Venta', 'pos-streaming' ),// Título de la página (Mantenemos 'pos-streaming' para contenido)
-        __( 'POS', 'pos-streaming' ),           // Título del submenú (Mantenemos 'pos-streaming')
+        __( 'Punto de Venta', 'pos-streaming' ),           // Título del submenú (Mantenemos 'pos-streaming')
         'manage_woocommerce',                   // Capacidad
         'pos-base',                             
         'pos_base_render_page'                  
@@ -256,13 +256,11 @@ function pos_base_render_page() {
                     <table id="pos-sales-datatable" class="display wp-list-table widefat fixed striped" style="width:100%">
                         <thead>
                             <tr>
-                                <th><?php esc_html_e( 'Pedido #', 'pos-streaming' ); ?></th>
-                                <th><?php esc_html_e( 'Fecha', 'pos-streaming' ); ?></th>
-                                <th><?php esc_html_e( 'Cliente', 'pos-streaming' ); ?></th>
-                                <th><?php esc_html_e( 'Total', 'pos-streaming' ); ?></th>
-                                <th><?php esc_html_e( 'Tipo (POS)', 'pos-streaming' ); ?></th>
-                                <th><?php esc_html_e( 'Notas', 'pos-streaming' ); ?></th>
-                                <th><?php esc_html_e( 'Meta', 'pos-streaming' ); ?></th>
+                                <!-- Col 1 --> <th><?php esc_html_e( 'Pedido / Fecha / Tipo', 'pos-base' ); ?></th>
+                                <!-- Col 2 --> <th><?php esc_html_e( 'Cliente / Contacto', 'pos-base' ); ?></th>
+                                <!-- Col 3 --> <th><?php esc_html_e( 'Producto(s)', 'pos-base' ); ?></th> <!-- NUEVO -->
+                                <!-- Col 4 --> <th><?php esc_html_e( 'Vencimiento / Historial', 'pos-base' ); ?></th>
+                                <!-- Col 5 --> <th><?php esc_html_e( 'Notas / Detalles', 'pos-base' ); ?></th>
                             </tr>
                         </thead>
                         <tbody>

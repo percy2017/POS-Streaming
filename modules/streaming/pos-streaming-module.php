@@ -1,11 +1,12 @@
 <?php
-/**
- * Archivo Principal del Módulo POS Streaming para POS Base
- *
- * Este archivo es cargado por pos-base.php cuando el módulo está activo.
- * Se encarga de incluir otros archivos del módulo y registrar hooks iniciales.
- */
-
+ /**
+  * Module Name: Streaming
+  * Description: Gestiona Cuentas y Perfiles de Streaming, permitiendo asignarlos a ventas de suscripción desde el POS.
+  * Author: Ing. Percy Alvarez
+  * Version: 1.0.0
+  */
+ 
+ 
 // Evitar acceso directo
 defined( 'ABSPATH' ) or die( '¡Acceso no permitido!' );
 

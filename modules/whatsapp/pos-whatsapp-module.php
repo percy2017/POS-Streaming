@@ -1,12 +1,12 @@
 <?php
+
 /**
- * Plugin Name: POS Base - WhatsApp Module (Settings Only)
- * Description: Añade la configuración para el módulo WhatsApp a POS Base.
- * Version: 2.0 (Reset)
- * Author: Tu Nombre
- * Text Domain: pos-whatsapp
- * Domain Path: /languages
+ * Module Name: WhatsApp Integration
+ * Description: Añade un widget de chat flotante, botón en productos y botón en checkout para contacto por WhatsApp.
+ * Author: Ing. Percy ALvarez
+ * Version: 1.0.0
  */
+
 
 // Evitar acceso directo
 defined( 'ABSPATH' ) or die( '¡Acceso no permitido!' );

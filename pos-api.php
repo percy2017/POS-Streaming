@@ -1201,154 +1201,288 @@ function pos_base_api_get_calendar_events( WP_REST_Request $request ) {
 }
 
 
-
 /**
  * Callback API: Obtener datos de ventas para DataTables.
+ * MODIFICADO (Opción 2 - Agrupado v2): 5 Columnas agrupadas (incluye Productos).
+ * CORREGIDO: Asegura que recordsTotal y recordsFiltered sean enteros.
  */
 function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
-    // Parámetros ya validados/sanitizados por 'args'
+    // Parámetros (sin cambios)
     $params = $request->get_params();
     $draw = $params['draw'];
     $start = $params['start'];
     $length = $params['length'];
     $search_value = $params['search']['value'] ?? '';
     $order_params = $params['order'][0] ?? [];
-    $order_column_index = $order_params['column'] ?? 0;
-    $order_dir = $order_params['dir'] ?? 'desc'; // Por defecto descendente
+    $order_column_index = $order_params['column'] ?? 0; // Índice de la columna AGRUPADA
+    $order_dir = $order_params['dir'] ?? 'desc';
 
-    error_log('POS Base DEBUG: Entrando en pos_base_api_get_sales_for_datatable. Draw: ' . $draw . ', Start: ' . $start . ', Length: ' . $length . ', Search: "' . $search_value . '"');
+    error_log('POS Base DEBUG: Entrando en pos_base_api_get_sales_for_datatable (v5 - Agrupado 5 Col). Draw: ' . $draw . ', Search: "' . $search_value . '"');
 
-    // --- Mapeo de columnas de DataTables a campos de WC_Order_Query ---
+    // --- Mapeo de columnas AGRUPADAS a campos de WC_Order_Query ---
     $column_map = array(
-        0 => 'ID',          // Pedido #
-        1 => 'date_created',// Fecha
-        2 => 'billing_full_name', // Cliente (aproximado, WC_Order_Query no ordena bien por esto directamente)
-        3 => 'total',       // Total
-        4 => '_pos_sale_type', // Tipo (POS) - Ordenar por meta
-        5 => 'ID',          // Notas (no se puede ordenar directamente)
-        6 => 'ID',          // Meta (no se puede ordenar directamente)
+        0 => 'date_created',                // Col 1 (Pedido/Fecha/Tipo) -> Ordenar por Fecha
+        1 => 'billing_full_name',           // Col 2 (Cliente/Contacto) -> Ordenar por Nombre (aproximado)
+        2 => 'ID',                          // Col 3 (Producto(s)) -> No ordenable, fallback a ID
+        3 => '_pos_subscription_expiry_date', // Col 4 (Vencimiento/Historial) -> Ordenar por Vencimiento
+        4 => 'ID',                          // Col 5 (Notas/Detalles) -> No ordenable, fallback a ID
     );
-    $orderby = $column_map[ $order_column_index ] ?? 'ID';
+    $orderby = $column_map[ $order_column_index ] ?? 'date_created'; // Ordenar por fecha por defecto
     // --- Fin mapeo ---
 
     // --- Argumentos base para WC_Order_Query ---
     $args = array(
-        'return'    => 'ids', // Obtener solo IDs para eficiencia
-        'paginate'  => true,  // Habilitar paginación
-        'limit'     => $length, // Registros por página
-        'paged'     => $length > 0 ? ( $start / $length ) + 1 : 1, // Calcular página actual
-        'orderby'   => $orderby,
-        'order'     => strtoupper($order_dir),
+        'return'    => 'ids',
+        'paginate'  => true,
+        'limit'     => $length,
+        'paged'     => $length > 0 ? ( $start / $length ) + 1 : 1,
+        // 'orderby' y 'order' se establecen más abajo
     );
+    // --- Fin argumentos base ---
 
-    // Ajuste para ordenar por metadatos
-    if ( in_array( $orderby, ['_pos_sale_type'] ) ) {
+    // --- Ajustes para Ordenación (Ajustado para campos meta) ---
+    if ( $orderby === '_pos_subscription_expiry_date' ) { // Ordenar Col 4 por fecha
         $args['meta_key'] = $orderby;
-        $args['orderby'] = 'meta_value';
+        $args['orderby'] = 'meta_value_date';
+        $args['meta_type'] = 'DATE';
     }
-    // Ajuste para ordenar por nombre de cliente (mejor esfuerzo)
-    if ($orderby === 'billing_full_name') {
-         // WC_Order_Query no ordena bien por nombre completo, ordenar por ID como fallback
-         $args['orderby'] = 'ID';
+    elseif ($orderby === 'billing_full_name') { // Ordenar Col 2 por nombre (fallback a ID)
+        // WC_Order_Query no soporta ordenar directamente por nombre formateado
+        // Usamos 'ID' como fallback o podrías intentar ordenar por meta 'first_name' o 'last_name'
+        $args['orderby'] = 'ID';
+    } else {
+        // Para otros casos (ID, date_created), WC_Order_Query los maneja directamente.
+        $args['orderby'] = $orderby;
     }
+    $args['order'] = strtoupper($order_dir); // Establecer dirección de orden
+    // --- Fin Ajustes Ordenación ---
 
-
-    // Añadir búsqueda si existe
+    // --- Ajustes para Búsqueda ---
+    $meta_query_search = [];
     if ( ! empty( $search_value ) ) {
-        // 's' busca en ID, email, nombre, apellido, items (SKU/nombre)
-        $args['s'] = $search_value;
-        // Podríamos añadir búsqueda en meta_query si es necesario
+        $args['s'] = $search_value; // Búsqueda estándar (incluye nombres de items, ID, etc.)
+        $meta_query_search = array( // Búsqueda adicional en metas
+            'relation' => 'OR',
+            array( 'key' => '_billing_phone', 'value' => $search_value, 'compare' => 'LIKE' ),
+            array( 'key' => '_pos_subscription_title', 'value' => $search_value, 'compare' => 'LIKE' ),
+        );
     }
-    // --- Fin argumentos ---
 
-    error_log('POS Base DEBUG: WC_Order_Query args: ' . print_r($args, true));
+    // Combinar meta query de búsqueda con otras meta queries si las hubiera
+    if ( ! empty( $meta_query_search ) ) {
+        if ( isset( $args['meta_query'] ) ) {
+            // Si ya existe una meta_query (ej: para filtros futuros), combinarla
+            $args['meta_query'] = array(
+                'relation' => 'AND', // La búsqueda debe cumplir Y otros filtros
+                $args['meta_query'], // Filtros existentes
+                $meta_query_search   // Búsqueda en metas
+            );
+        } else {
+            // Si no había meta_query, simplemente añadir la de búsqueda
+            $args['meta_query'] = $meta_query_search;
+        }
+    }
+    // --- Fin Ajustes Búsqueda ---
+
+    error_log('POS Base DEBUG: WC_Order_Query args (v5 - Agrupado 5 Col): ' . print_r($args, true));
 
     // Ejecutar la consulta para obtener IDs paginados y filtrados
     $order_query = new WC_Order_Query( $args );
-    $result_object = $order_query->get_orders(); // Devuelve un objeto con 'orders' y 'total'
+    $result_object = $order_query->get_orders();
     $order_ids = $result_object->orders ?? [];
-    $records_filtered = $result_object->total ?? 0; // Total después de filtrar/buscar
+
+    // Obtener el total de registros FILTRADOS (desde el objeto paginado)
+    $records_filtered_raw = $result_object->total ?? 0;
+    // Asegurarnos de que sea un entero
+    $records_filtered = is_int($records_filtered_raw) ? $records_filtered_raw : 0;
+    error_log('POS Base DEBUG: records_filtered_raw: ' . print_r($records_filtered_raw, true) . ', records_filtered (after check): ' . $records_filtered);
+
 
     // Obtener el total de registros SIN filtrar (para DataTables)
-    // Reutilizar args pero quitar paginación, límite y búsqueda
-    $total_args = $args;
-    unset($total_args['paginate'], $total_args['limit'], $total_args['paged'], $total_args['s']);
-    $total_args['return'] = 'count'; // Solo contar
+    // Usamos un query separado solo para contar, sin filtros de búsqueda ni paginación
+    $total_args = array('return' => 'count');
     $total_query = new WC_Order_Query( $total_args );
-    $records_total = $total_query->get_orders(); // Devuelve el conteo
+    $records_total_raw = $total_query->get_orders(); // Obtener el resultado crudo
 
-    error_log('POS Base DEBUG: Registros encontrados: ' . count($order_ids) . ', Filtrados: ' . $records_filtered . ', Total: ' . $records_total);
+    // Asegurarnos de que sea un entero, si no, usar 0
+    $records_total = is_int($records_total_raw) ? $records_total_raw : 0;
+    error_log('POS Base DEBUG: records_total_raw: ' . print_r($records_total_raw, true) . ', records_total (after check): ' . $records_total);
+
+    error_log('POS Base DEBUG: Registros encontrados (v5 - Agrupado 5 Col): ' . count($order_ids) . ', Filtrados: ' . $records_filtered . ', Total: ' . $records_total);
+
 
     // --- Preparar datos para la respuesta DataTables ---
     $data = array();
     if ( ! empty( $order_ids ) ) {
-        // Obtener objetos WC_Order completos para los IDs encontrados
         $orders = array_filter( array_map( 'wc_get_order', $order_ids ) );
+        $active_modules = get_option( 'pos_base_active_modules', [] );
+        $is_streaming_active = ( is_array( $active_modules ) && in_array( 'streaming', $active_modules, true ) );
 
         foreach ( $orders as $order ) {
+            // --- Obtener TODOS los datos individuales necesarios (sin cambios) ---
             $order_id = $order->get_id();
             $order_url = $order->get_edit_order_url();
             $customer_name = $order->get_formatted_billing_full_name() ?: __( 'Invitado', 'pos-base' );
             $user_id = $order->get_customer_id();
             $customer_link = $user_id ? get_edit_user_link( $user_id ) : '';
-            $date_created = $order->get_date_created(); // Objeto WC_DateTime
+            $date_created = $order->get_date_created();
             $formatted_date = $date_created ? $date_created->date_i18n( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ) ) : '-';
-
-            // Obtener la última nota (si existe)
-            $notes = wc_get_order_notes( array( 'order_id' => $order_id, 'number' => 1, 'order' => 'DESC', 'type' => 'customer' ) ); // O 'internal' o '' para todas
-            $notes_html = '';
-            if (!empty($notes)) {
-                $latest_note = reset($notes);
-                $notes_html = wp_kses_post( wp_trim_words( $latest_note->content, 15, '...' ) );
-            }
-
-            // Obtener tipo de venta POS
+            $phone = $order->get_billing_phone();
             $sale_type = $order->get_meta( '_pos_sale_type', true );
             $sale_type_label = $sale_type ? esc_html( ucfirst( $sale_type ) ) : 'N/A';
-
-            // --- Construir contenido para la columna 'Meta' (Suscripción Base) ---
-            $meta_display = '-';
-            if ( $sale_type === 'subscription' ) {
-                $sub_title = $order->get_meta( '_pos_subscription_title', true );
-                $sub_expiry = $order->get_meta( '_pos_subscription_expiry_date', true );
-                $sub_color = $order->get_meta( '_pos_subscription_color', true );
-                $meta_parts = [];
-                if ( ! empty( $sub_title ) ) $meta_parts[] = '<strong>' . esc_html__( 'Título:', 'pos-base' ) . '</strong> ' . esc_html( $sub_title );
-                if ( ! empty( $sub_expiry ) ) {
-                    $formatted_expiry = $sub_expiry; try { $date_obj = new DateTime($sub_expiry); $formatted_expiry = $date_obj->format(get_option('date_format')); } catch (Exception $e) {}
-                    $meta_parts[] = '<strong>' . esc_html__( 'Vence:', 'pos-base' ) . '</strong> ' . esc_html( $formatted_expiry );
-                }
-                if ( ! empty( $sub_color ) ) {
-                    $meta_parts[] = '<strong>' . esc_html__( 'Color:', 'pos-base' ) . '</strong> ' . '<span style="display:inline-block; width: 12px; height: 12px; background-color:' . esc_attr( $sub_color ) . '; border: 1px solid #ccc; vertical-align: middle; margin-right: 3px;"></span>' . '<code>' . esc_html( $sub_color ) . '</code>';
-                }
-                if ( ! empty( $meta_parts ) ) $meta_display = implode( '<br>', $meta_parts );
-                else $meta_display = '<em>' . esc_html__( 'Detalles suscripción no encontrados', 'pos-base' ) . '</em>';
+            $sub_expiry = $order->get_meta( '_pos_subscription_expiry_date', true );
+            $sub_title = $order->get_meta( '_pos_subscription_title', true );
+            $profile_id = $order->get_meta( '_pos_assigned_profile_id', true );
+            $avatar_url = get_avatar_url( $user_id ?: $order->get_billing_email(), ['size' => 32, 'default' => 'mystery'] );
+            $custom_avatar_id = $user_id ? get_user_meta( $user_id, 'pos_customer_avatar_id', true ) : null;
+            if ($custom_avatar_id && $url = wp_get_attachment_image_url($custom_avatar_id, 'thumbnail')) {
+                $avatar_url = $url;
             }
-            // --- Fin construcción columna 'Meta' ---
+            $customer_note_content = '';
+            $note_args = array('order_id' => $order_id, 'type' => 'customer', 'number' => 1, 'orderby' => 'comment_date_gmt', 'order' => 'DESC');
+            $notes = wc_get_order_notes( $note_args );
+            if ( ! empty( $notes ) ) {
+                $latest_note = reset( $notes );
+                $customer_note_content = $latest_note->content;
+            }
 
-            // --- Construir array de datos para la fila ---
+            // --- Construir HTML para las 5 columnas AGRUPADAS ---
+
+            // Columna 1: Pedido / Fecha / Tipo
+            $col1_html = '<a href="' . esc_url( $order_url ) . '"><strong>#' . $order_id . '</strong></a>';
+            $col1_html .= '<br><small>' . $formatted_date . '</small>';
+            $col1_html .= '<br><span class="pos-sale-type-badge pos-type-' . esc_attr($sale_type ?: 'direct') . '">' . $sale_type_label . '</span>';
+            $col1_html .= '<div class="row-actions">';
+            $col1_html .= '<span class="view"><a href="' . esc_url( $order_url ) . '">' . __('Ver Pedido', 'pos-base') . '</a></span>';
+
+            // --- INICIO: Acción y Modal SMS ---
+            $modal_id = 'pos-sms-modal-content-' . $order_id;
+            $thickbox_url = '#TB_inline?width=450&height=350&inlineId=' . $modal_id; // Ajusta tamaño si es necesario
+            // Solo mostrar enlace si hay teléfono
+            if ($phone) {
+                $col1_html .= ' | <span class="sms"><a href="' . esc_url($thickbox_url) . '" class="thickbox send-sms-action" data-order-id="' . $order_id . '" data-phone="' . esc_attr($phone) . '" title="' . esc_attr__('Enviar Mensaje (WhatsApp/SMS)', 'pos-base') . '">' . __('Enviar Mensaje', 'pos-base') . '</a></span>';
+
+                // Contenido oculto del modal para ESTA fila
+                $col1_html .= '<div id="' . esc_attr($modal_id) . '" style="display:none;">';
+                $col1_html .= '<div class="pos-sms-modal-wrapper">'; // Contenedor para estilos
+                $col1_html .= '<h3>' . sprintf(esc_html__('Enviar Mensaje a %s', 'pos-base'), esc_html($customer_name)) . '</h3>';
+                $col1_html .= '<p><strong>' . esc_html__('Teléfono:', 'pos-base') . '</strong> ' . esc_html($phone) . '</p>';
+                $col1_html .= '<p><label for="pos-sms-message-' . $order_id . '">' . esc_html__('Mensaje:', 'pos-base') . '</label><br>';
+                $col1_html .= '<textarea id="pos-sms-message-' . $order_id . '" class="pos-sms-message-input" rows="5" style="width: 98%;"></textarea></p>';
+                $col1_html .= '<p class="submit">';
+                $col1_html .= '<button type="button" class="button button-primary pos-send-sms-button" data-order-id="' . $order_id . '" data-phone="' . esc_attr($phone) . '">' . esc_html__('Enviar Mensaje', 'pos-base') . '</button>';
+                $col1_html .= '<span class="spinner" style="float: none; vertical-align: middle; margin-left: 5px;"></span>'; // Spinner
+                $col1_html .= '</p>';
+                $col1_html .= '<div class="pos-sms-feedback" style="margin-top: 10px;"></div>'; // Para mensajes de estado
+                $col1_html .= '</div>'; // fin .pos-sms-modal-wrapper
+                $col1_html .= '</div>'; // fin #modal_id
+            }
+            // --- FIN: Acción y Modal SMS ---
+            
+            $col1_html .= '</div>'; // Fin .row-actions
+         
+
+
+            // Columna 2: Cliente / Contacto
+            $col2_html = '<div style="display: flex; align-items: center;">';
+            $col2_html .= '<img src="' . esc_url($avatar_url) . '" width="50" height="50" style="border-radius: 50%; margin-right: 8px;" loading="lazy">';
+            $col2_html .= '<div>';
+            $col2_html .= $customer_link ? '<a href="' . esc_url( $customer_link ) . '">' . esc_html( $customer_name ) . '</a>' : esc_html( $customer_name );
+            if ($phone) {
+                $col2_html .= '<br><small><a href="tel:' . esc_attr($phone) . '">' . esc_html($phone) . '</a></small>';
+            }
+            $col2_html .= '</div></div>';
+
+
+            // Columna 3: Producto(s)
+            $col3_html = '';
+            $items = $order->get_items();
+            $item_list = [];
+            if (!empty($items)) {
+                foreach ($items as $item) {
+                    $product_name = $item->get_name();
+                    $quantity = $item->get_quantity();
+                    $item_list[] = esc_html($product_name) . ' (x' . $quantity . ')';
+                }
+                if (count($item_list) > 2) {
+                     $col3_html = implode('<br>', array_slice($item_list, 0, 2));
+                     $col3_html .= '<br><small>... (' . sprintf(__('%d más', 'pos-base'), count($item_list) - 2) . ')</small>';
+                } else {
+                     $col3_html = implode('<br>', $item_list);
+                }
+            }
+            if (empty($col3_html)) {
+                $col3_html = '-';
+            }
+
+
+            // Columna 4: Vencimiento / Historial (Estadísticas)
+            $col4_html = '-';
+            $vencimiento_html = '';
+            if ( ! empty( $sub_expiry ) && $sale_type === 'subscription' ) {
+                $formatted_expiry = '-';
+                $human_time_diff = '';
+                try {
+                    $expiry_obj = new DateTime( $sub_expiry );
+                    $formatted_expiry = $expiry_obj->format( get_option( 'date_format' ) );
+                    $human_time_diff = human_time_diff( $expiry_obj->getTimestamp(), current_time( 'timestamp' ) );
+                    $is_past = $expiry_obj->getTimestamp() < current_time( 'timestamp' );
+                    $human_time_diff = $is_past ? sprintf(__('%s atrás', 'pos-base'), $human_time_diff) : sprintf(__('en %s', 'pos-base'), $human_time_diff);
+                } catch (Exception $e) { $formatted_expiry = $sub_expiry; }
+                $vencimiento_html = esc_html( $formatted_expiry );
+                $vencimiento_html .= '<br><small>' . esc_html( $human_time_diff ) . '</small>';
+            }
+            $stats_html = '';
+            if ($user_id) {
+                $order_count = wc_get_customer_order_count($user_id);
+                $total_spent = wc_get_customer_total_spent($user_id);
+                $aov = ($order_count > 0) ? $total_spent / $order_count : 0;
+                $stats_html .= '<div class="pos-customer-stats" style="font-size: 0.9em; margin-top: 5px; padding-top: 5px; border-top: 1px dashed #eee;">';
+                $stats_html .= sprintf( '%s: %d<br>', __('Pedidos', 'pos-base'), $order_count );
+                $stats_html .= sprintf( '%s: %s<br>', __('Total Gastado', 'pos-base'), wc_price($total_spent) );
+                $stats_html .= sprintf( '%s: %s', __('Valor Medio', 'pos-base'), wc_price($aov) );
+                $stats_html .= '</div>';
+            }
+            if (!empty($vencimiento_html) || !empty($stats_html)) {
+                $col4_html = $vencimiento_html . $stats_html;
+            }
+
+
+            // Columna 5: Notas / Detalles
+            $col5_html = '';
+            if (!empty($customer_note_content)) {
+                $col5_html .= '<div class="pos-order-note-display"><strong>' . __('Nota Cliente:', 'pos-base') . '</strong> ' . wp_kses_post( wp_trim_words( $customer_note_content, 25, '...' ) ) . '</div>';
+            }
+            $details_parts = [];
+            if ( $sale_type === 'subscription' && !empty($sub_title)) {
+                 $details_parts[] = '<strong>' . esc_html__( 'Susc:', 'pos-base' ) . '</strong> ' . esc_html( $sub_title );
+            }
+            if ( $is_streaming_active && $profile_id && $profile_title = get_the_title( $profile_id ) ) {
+                 $profile_url = get_edit_post_link( $profile_id );
+                 $details_parts[] = '<strong>' . esc_html__( 'Perfil:', 'pos-streaming' ) . '</strong> ' . ($profile_url ? '<a href="'.esc_url($profile_url).'" target="_blank">' : '') . esc_html( $profile_title ) . ($profile_url ? '</a>' : '');
+            }
+            if (!empty($details_parts)) {
+                 $col5_html .= (!empty($col5_html) ? '<hr style="margin: 5px 0; border-style: dashed;">' : '') . implode( '<br>', $details_parts );
+            }
+            if (empty($col5_html)) {
+                $col5_html = '-';
+            }
+
+
+            // --- Construir array de datos para la fila (AHORA CON 5 ELEMENTOS) ---
             $data[] = array(
-                // Columna 0: Pedido #
-                '<a href="' . esc_url( $order_url ) . '">#' . $order_id . '</a>',
-                // Columna 1: Fecha
-                $formatted_date,
-                // Columna 2: Cliente
-                $customer_link ? '<a href="' . esc_url( $customer_link ) . '">' . esc_html( $customer_name ) . '</a>' : esc_html( $customer_name ),
-                // Columna 3: Total
-                $order->get_formatted_order_total(), // Total formateado con símbolo de moneda
-                // Columna 4: Tipo (POS)
-                $sale_type_label,
-                // Columna 5: Notas
-                $notes_html,
-                // Columna 6: Meta
-                $meta_display,
+                $col1_html, // Columna 1
+                $col2_html, // Columna 2
+                $col3_html, // Columna 3 (Productos)
+                $col4_html, // Columna 4 (Vencimiento/Historial)
+                $col5_html, // Columna 5 (Notas/Detalles)
             );
             // --- Fin construcción fila ---
         }
     }
     // --- Fin preparación datos ---
 
-    // --- Respuesta JSON formateada para DataTables ---
+    // --- Respuesta JSON---
     $response_data = array(
         "draw"            => $draw,
         "recordsTotal"    => $records_total,
@@ -1357,9 +1491,12 @@ function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
     );
     // --- Fin respuesta ---
 
-    error_log('POS Base DEBUG: pos_base_api_get_sales_for_datatable devolviendo respuesta para Draw ' . $draw);
+    error_log('POS Base DEBUG: pos_base_api_get_sales_for_datatable (v5 - Agrupado 5 Col) devolviendo respuesta para Draw ' . $draw);
     return new WP_REST_Response( $response_data, 200 );
 }
+
+
+
 
 
 // =========================================================================

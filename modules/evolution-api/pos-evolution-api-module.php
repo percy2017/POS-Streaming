@@ -30,7 +30,9 @@ $required_files = [
     'settings.php',    // Gestionará los ajustes del módulo.
     'api-client.php',  // Contendrá la clase o funciones para interactuar con la API.
     'hooks.php',       // Contendrá los hooks para integrar con WP/WC/POS Base.
-    'admin-page.php',  // <-- NUEVO: Renderizará la página de gestión de instancia.
+    'cron.php',        // Gestiona las tareas programadas.
+    'admin-page.php',  // Renderizará la página de gestión de instancia.
+
     // Añade aquí otros archivos PHP principales si son necesarios.
 ];
 

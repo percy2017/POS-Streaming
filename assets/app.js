@@ -99,7 +99,6 @@ jQuery(function ($) {
 
     // --- Funciones ---
 
-    // --- **NUEVO:** Función para manejar el clic en las pestañas ---
     /**
      * Maneja el clic en una pestaña de navegación.
      */
@@ -156,7 +155,6 @@ jQuery(function ($) {
         }
     }
 
-
     // --- Funciones de Productos y Carrito (Existentes y Modificadas) ---
     function showMessage(container, message, type = 'info') {
         container.html(`<p class="message-feedback ${type}">${message}</p>`);
@@ -200,180 +198,180 @@ jQuery(function ($) {
         }
     }
 
-  function renderProducts(products) {
-      // Log para depuración: Muestra los datos crudos recibidos de la API
-      console.log("Datos recibidos para renderizar productos:", JSON.stringify(products));
-  
-      productListContainer.empty(); // Limpiar contenedor antes de añadir nuevos productos
-  
-      // Validar que la respuesta sea un array
-      if (!Array.isArray(products)) {
-          console.error("La respuesta de la API no es un array:", products);
-          showMessage(productListContainer, posBaseParams.i18n?.error_api_response || 'Respuesta inesperada de la API.', 'error');
-          return;
-      }
-  
-      // Mostrar mensaje si no hay productos
-      if (products.length === 0) {
-          const msg = isCurrentlyFeatured
-              ? (posBaseParams.i18n?.no_featured_products_found || 'No hay productos destacados disponibles.')
-              : (posBaseParams.i18n?.no_products_found || 'No se encontraron productos para la búsqueda.');
-          showMessage(productListContainer, msg, 'info');
-          return;
-      }
-  
-      // Añadir título a la lista (Destacados o Resultados de búsqueda)
-      const listTitle = isCurrentlyFeatured
-          ? (posBaseParams.i18n?.featured_products_title || 'Productos Destacados')
-          : (currentSearchTerm
-              ? `${posBaseParams.i18n?.search_results_title || 'Resultados para'} "${currentSearchTerm}"`
-              : (posBaseParams.i18n?.all_products_title || 'Todos los Productos')
-            );
-      productListContainer.append(`<h3 class="pos-product-list-title">${listTitle}</h3>`);
-  
-      // Iterar sobre cada producto y crear su elemento HTML
-      products.forEach((product, index) => {
-          // Validar datos básicos del producto
-          if (!product || typeof product !== 'object' || !product.id) {
-              console.warn(`[Índice ${index}] Producto inválido o incompleto recibido:`, product);
-              return; // Saltar este producto si es inválido
-          }
-  
-          // Determinar tipo de producto y si tiene variaciones válidas
-          const isVariable = product.type === 'variable' && Array.isArray(product.variations) && product.variations.length > 0;
-          const isSimple = product.type === 'simple';
-  
-          // Determinar estado de stock para productos simples
-          const simpleStockStatus = isSimple ? product.stock_status : 'N/A'; // 'N/A' o similar si no es simple
-          const isSimpleInStock = isSimple && simpleStockStatus === 'instock';
-  
-          // --- Generar HTML para las variaciones (si es producto variable) ---
-          let variationsHtml = '';
-          if (isVariable) {
-              variationsHtml = '<ul class="product-variations-list">';
-              product.variations.forEach(variation => {
-                  // Validar datos de la variación
-                  if (!variation || typeof variation !== 'object' || !variation.variation_id) {
-                      console.warn(`[Producto ID ${product.id}] Variación inválida recibida:`, variation);
-                      return; // Saltar esta variación si es inválida
-                  }
-  
-                  const variationId = variation.variation_id;
-                  const isVariationInStock = variation.stock_status === 'instock';
-  
-                  // Texto de stock para la variación
-                  const stockText = isVariationInStock
-                      ? (variation.stock_quantity !== null ? `${posBaseParams.i18n?.stock || 'Stock'}: ${variation.stock_quantity}` : (posBaseParams.i18n?.instock || 'En stock'))
-                      : (posBaseParams.i18n?.outofstock || 'Agotado');
-  
-                  // Texto de precio para la variación (usar price_html si existe, sino formatear price)
-                  // Asegurarse de que el precio sea un número antes de formatear
-                  const variationPrice = parseFloat(variation.price);
-                  const priceText = variation.price_html || (!isNaN(variationPrice) ? variationPrice.toFixed(2) : (posBaseParams.i18n?.price_na || 'N/A'));
-  
-                  // Nombre de la variación (atributos)
-                  let variationName = '';
-                  if (variation.attributes && typeof variation.attributes === 'object') {
-                      variationName = Object.values(variation.attributes).join(' / ');
-                  }
-                  variationName = variationName || (posBaseParams.i18n?.variation || 'Variación'); // Fallback
-  
-                  // Construir el HTML del item de la variación
-                  variationsHtml += `
-                      <li class="product-variation-item ${isVariationInStock ? 'instock' : 'outofstock'}" data-variation-id="${variationId}">
-                          <span class="variation-details">
-                              <span class="variation-name">${variationName}</span>
-                              ${variation.sku ? `<span class="variation-sku">(SKU: ${variation.sku})</span>` : ''}
-                               - <span class="variation-price">${priceText}</span>
-                          </span>
-                          <span class="variation-stock-status">${stockText}</span>
-                          <span class="variation-actions">
-                              <button type="button" class="button button-small add-variation-to-cart"
-                                      data-product-id="${product.id}" data-variation-id="${variationId}"
-                                      ${!isVariationInStock ? 'disabled' : ''}
-                                      title="${posBaseParams.i18n?.add_variation_to_cart || 'Añadir'} ${variationName}">
-                                  ${posBaseParams.i18n?.add_to_cart || 'Añadir'}
-                              </button>
-                          </span>
-                      </li>`;
-              });
-              variationsHtml += '</ul>';
-          } // Fin de la generación de HTML de variaciones
-  
-          // --- Generar HTML para las acciones principales (botón Añadir para simples, texto para variables) ---
-          let actionHtml = '';
-          if (isSimple) {
-              actionHtml = `
-                  <button type="button" class="button button-primary add-simple-to-cart"
-                          data-product-id="${product.id}" ${!isSimpleInStock ? 'disabled' : ''}
-                          title="${posBaseParams.i18n?.add_product_to_cart || 'Añadir'} ${product.name || 'producto'}">
-                      ${posBaseParams.i18n?.add_to_cart || 'Añadir'}
-                  </button>`;
-          } else if (isVariable) {
-              actionHtml = `<span class="select-variation-label">${posBaseParams.i18n?.select_variation || 'Selecciona opción:'}</span>`;
-          }
-          // Podríamos añadir un 'else' para otros tipos de producto si fuera necesario
-  
-          // --- Formatear precio principal (para simples y variables) ---
-          // Usar product.price que la API envía (debería ser el precio normal o el mínimo de variación)
-          const mainPriceValue = parseFloat(product.price);
-          const mainPriceText = !isNaN(mainPriceValue) ? mainPriceValue.toFixed(2) : (posBaseParams.i18n?.price_na || 'N/A');
-  
-          // Texto de stock para productos simples
-          const simpleStockText = isSimpleInStock
-              ? (product.stock_quantity !== null ? `${posBaseParams.i18n?.stock || 'Stock'}: ${product.stock_quantity}` : (posBaseParams.i18n?.instock || 'En stock'))
-              : (posBaseParams.i18n?.outofstock || 'Agotado');
-  
-          // --- Construir el HTML completo del item del producto ---
-          const productItem = $(`
-              <div class="pos-product-item
-                          ${isVariable ? 'product-type-variable' : (isSimple ? 'product-type-simple' : 'product-type-other')}
-                          ${!isVariable && !isSimpleInStock ? 'product-outofstock' : ''}"
-                   data-product-id="${product.id}">
-  
-                  <div class="product-main-info">
-                      <img src="${product.image_url || posBaseParams.placeholder_image_url || ''}"
-                           alt="${product.name || ''}" class="pos-product-thumbnail">
-  
-                      <div class="product-details">
-                          <strong class="product-name">${product.name || (posBaseParams.i18n?.unnamed_product || 'Sin nombre')}</strong>
-                          <div class="product-meta">
-                              ${product.sku ? `<span class="product-sku">SKU: ${product.sku}</span>` : ''}
-  
-                              <!-- ***** LÍNEA MODIFICADA ***** -->
-                              ${isSimple ?
-                                  `<span class="product-price">${posBaseParams.i18n?.price_label || 'Precio'}: ${mainPriceText}</span>` :
-                                  (isVariable ?
-                                      `<span class="product-price">${posBaseParams.i18n?.price_from_label || 'Desde'}: ${mainPriceText}</span>` :
-                                      '' // No mostrar precio principal si no es simple ni variable
-                                  )
-                              }
-                              <!-- ***** FIN LÍNEA MODIFICADA ***** -->
-  
-                              ${isSimple ? `<span class="product-stock-status stock-${simpleStockStatus}">${simpleStockText}</span>` : ''}
-                          </div>
-                      </div>
-  
-                      <div class="product-actions">
-                          ${actionHtml}
-                      </div>
-                  </div>
-  
-                  ${variationsHtml} <!-- Aquí se inserta la lista de variaciones si existen -->
-  
-              </div>
-          `);
-  
-          // Guardar los datos completos del producto en el elemento DOM para fácil acceso posterior
-          productItem.data('productData', product);
-  
-          // Añadir el elemento del producto al contenedor en la página
-          productListContainer.append(productItem);
-  
-      }); // Fin del bucle forEach
-  
-  } // Fin de la función renderProducts
-  
+    function renderProducts(products) {
+        // Log para depuración: Muestra los datos crudos recibidos de la API
+        console.log("Datos recibidos para renderizar productos:", JSON.stringify(products));
+    
+        productListContainer.empty(); // Limpiar contenedor antes de añadir nuevos productos
+    
+        // Validar que la respuesta sea un array
+        if (!Array.isArray(products)) {
+            console.error("La respuesta de la API no es un array:", products);
+            showMessage(productListContainer, posBaseParams.i18n?.error_api_response || 'Respuesta inesperada de la API.', 'error');
+            return;
+        }
+    
+        // Mostrar mensaje si no hay productos
+        if (products.length === 0) {
+            const msg = isCurrentlyFeatured
+                ? (posBaseParams.i18n?.no_featured_products_found || 'No hay productos destacados disponibles.')
+                : (posBaseParams.i18n?.no_products_found || 'No se encontraron productos para la búsqueda.');
+            showMessage(productListContainer, msg, 'info');
+            return;
+        }
+    
+        // Añadir título a la lista (Destacados o Resultados de búsqueda)
+        const listTitle = isCurrentlyFeatured
+            ? (posBaseParams.i18n?.featured_products_title || 'Productos Destacados')
+            : (currentSearchTerm
+                ? `${posBaseParams.i18n?.search_results_title || 'Resultados para'} "${currentSearchTerm}"`
+                : (posBaseParams.i18n?.all_products_title || 'Todos los Productos')
+                );
+        productListContainer.append(`<h3 class="pos-product-list-title">${listTitle}</h3>`);
+    
+        // Iterar sobre cada producto y crear su elemento HTML
+        products.forEach((product, index) => {
+            // Validar datos básicos del producto
+            if (!product || typeof product !== 'object' || !product.id) {
+                console.warn(`[Índice ${index}] Producto inválido o incompleto recibido:`, product);
+                return; // Saltar este producto si es inválido
+            }
+    
+            // Determinar tipo de producto y si tiene variaciones válidas
+            const isVariable = product.type === 'variable' && Array.isArray(product.variations) && product.variations.length > 0;
+            const isSimple = product.type === 'simple';
+    
+            // Determinar estado de stock para productos simples
+            const simpleStockStatus = isSimple ? product.stock_status : 'N/A'; // 'N/A' o similar si no es simple
+            const isSimpleInStock = isSimple && simpleStockStatus === 'instock';
+    
+            // --- Generar HTML para las variaciones (si es producto variable) ---
+            let variationsHtml = '';
+            if (isVariable) {
+                variationsHtml = '<ul class="product-variations-list">';
+                product.variations.forEach(variation => {
+                    // Validar datos de la variación
+                    if (!variation || typeof variation !== 'object' || !variation.variation_id) {
+                        console.warn(`[Producto ID ${product.id}] Variación inválida recibida:`, variation);
+                        return; // Saltar esta variación si es inválida
+                    }
+    
+                    const variationId = variation.variation_id;
+                    const isVariationInStock = variation.stock_status === 'instock';
+    
+                    // Texto de stock para la variación
+                    const stockText = isVariationInStock
+                        ? (variation.stock_quantity !== null ? `${posBaseParams.i18n?.stock || 'Stock'}: ${variation.stock_quantity}` : (posBaseParams.i18n?.instock || 'En stock'))
+                        : (posBaseParams.i18n?.outofstock || 'Agotado');
+    
+                    // Texto de precio para la variación (usar price_html si existe, sino formatear price)
+                    // Asegurarse de que el precio sea un número antes de formatear
+                    const variationPrice = parseFloat(variation.price);
+                    const priceText = variation.price_html || (!isNaN(variationPrice) ? variationPrice.toFixed(2) : (posBaseParams.i18n?.price_na || 'N/A'));
+    
+                    // Nombre de la variación (atributos)
+                    let variationName = '';
+                    if (variation.attributes && typeof variation.attributes === 'object') {
+                        variationName = Object.values(variation.attributes).join(' / ');
+                    }
+                    variationName = variationName || (posBaseParams.i18n?.variation || 'Variación'); // Fallback
+    
+                    // Construir el HTML del item de la variación
+                    variationsHtml += `
+                        <li class="product-variation-item ${isVariationInStock ? 'instock' : 'outofstock'}" data-variation-id="${variationId}">
+                            <span class="variation-details">
+                                <span class="variation-name">${variationName}</span>
+                                ${variation.sku ? `<span class="variation-sku">(SKU: ${variation.sku})</span>` : ''}
+                                - <span class="variation-price">${priceText}</span>
+                            </span>
+                            <span class="variation-stock-status">${stockText}</span>
+                            <span class="variation-actions">
+                                <button type="button" class="button button-small add-variation-to-cart"
+                                        data-product-id="${product.id}" data-variation-id="${variationId}"
+                                        ${!isVariationInStock ? 'disabled' : ''}
+                                        title="${posBaseParams.i18n?.add_variation_to_cart || 'Añadir'} ${variationName}">
+                                    ${posBaseParams.i18n?.add_to_cart || 'Añadir'}
+                                </button>
+                            </span>
+                        </li>`;
+                });
+                variationsHtml += '</ul>';
+            } // Fin de la generación de HTML de variaciones
+    
+            // --- Generar HTML para las acciones principales (botón Añadir para simples, texto para variables) ---
+            let actionHtml = '';
+            if (isSimple) {
+                actionHtml = `
+                    <button type="button" class="button button-primary add-simple-to-cart"
+                            data-product-id="${product.id}" ${!isSimpleInStock ? 'disabled' : ''}
+                            title="${posBaseParams.i18n?.add_product_to_cart || 'Añadir'} ${product.name || 'producto'}">
+                        ${posBaseParams.i18n?.add_to_cart || 'Añadir'}
+                    </button>`;
+            } else if (isVariable) {
+                actionHtml = `<span class="select-variation-label">${posBaseParams.i18n?.select_variation || 'Selecciona opción:'}</span>`;
+            }
+            // Podríamos añadir un 'else' para otros tipos de producto si fuera necesario
+    
+            // --- Formatear precio principal (para simples y variables) ---
+            // Usar product.price que la API envía (debería ser el precio normal o el mínimo de variación)
+            const mainPriceValue = parseFloat(product.price);
+            const mainPriceText = !isNaN(mainPriceValue) ? mainPriceValue.toFixed(2) : (posBaseParams.i18n?.price_na || 'N/A');
+    
+            // Texto de stock para productos simples
+            const simpleStockText = isSimpleInStock
+                ? (product.stock_quantity !== null ? `${posBaseParams.i18n?.stock || 'Stock'}: ${product.stock_quantity}` : (posBaseParams.i18n?.instock || 'En stock'))
+                : (posBaseParams.i18n?.outofstock || 'Agotado');
+    
+            // --- Construir el HTML completo del item del producto ---
+            const productItem = $(`
+                <div class="pos-product-item
+                            ${isVariable ? 'product-type-variable' : (isSimple ? 'product-type-simple' : 'product-type-other')}
+                            ${!isVariable && !isSimpleInStock ? 'product-outofstock' : ''}"
+                    data-product-id="${product.id}">
+    
+                    <div class="product-main-info">
+                        <img src="${product.image_url || posBaseParams.placeholder_image_url || ''}"
+                            alt="${product.name || ''}" class="pos-product-thumbnail">
+    
+                        <div class="product-details">
+                            <strong class="product-name">${product.name || (posBaseParams.i18n?.unnamed_product || 'Sin nombre')}</strong>
+                            <div class="product-meta">
+                                ${product.sku ? `<span class="product-sku">SKU: ${product.sku}</span>` : ''}
+    
+                                <!-- ***** LÍNEA MODIFICADA ***** -->
+                                ${isSimple ?
+                                    `<span class="product-price">${posBaseParams.i18n?.price_label || 'Precio'}: ${mainPriceText}</span>` :
+                                    (isVariable ?
+                                        `<span class="product-price">${posBaseParams.i18n?.price_from_label || 'Desde'}: ${mainPriceText}</span>` :
+                                        '' // No mostrar precio principal si no es simple ni variable
+                                    )
+                                }
+                                <!-- ***** FIN LÍNEA MODIFICADA ***** -->
+    
+                                ${isSimple ? `<span class="product-stock-status stock-${simpleStockStatus}">${simpleStockText}</span>` : ''}
+                            </div>
+                        </div>
+    
+                        <div class="product-actions">
+                            ${actionHtml}
+                        </div>
+                    </div>
+    
+                    ${variationsHtml} <!-- Aquí se inserta la lista de variaciones si existen -->
+    
+                </div>
+            `);
+    
+            // Guardar los datos completos del producto en el elemento DOM para fácil acceso posterior
+            productItem.data('productData', product);
+    
+            // Añadir el elemento del producto al contenedor en la página
+            productListContainer.append(productItem);
+    
+        }); // Fin del bucle forEach
+    
+    } // Fin de la función renderProducts
+    
 
     function addToCart(itemData) {
         if (isLoadingCartAction) return;
@@ -945,162 +943,161 @@ jQuery(function ($) {
         console.log('Tipo de venta cambiado a:', selectedType);
     }
 
-       function handleCompleteSale() {
-           if (isLoadingCheckoutAction || completeSaleButton.prop('disabled')) {
-               console.warn("Checkout en progreso o botón deshabilitado.");
-               return;
-           }
-   
-           // --- Validaciones Iniciales ---
-           if (cart.length === 0) {
-               if (typeof Swal !== 'undefined') Swal.fire('Error', 'El carrito está vacío.', 'error');
-               return;
-           }
-           if (!currentCustomerId) {
-               // Permitir venta como invitado si currentCustomerId es null o 0
-                   if (currentCustomerId !== 0 && currentCustomerId !== null) {
-                       if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se ha seleccionado un cliente.', 'error');
-                       return;
-                   }
-                   console.log("Procediendo con venta como invitado (Customer ID: 0)");
-                   currentCustomerId = 0; // Asegurar que sea 0 para invitado
-           }
-           const selectedPaymentMethod = $paymentMethodSelect.val();
-           if (!selectedPaymentMethod) {
-               if (typeof Swal !== 'undefined') Swal.fire('Error', 'Selecciona un método de pago.', 'error');
-               return;
-           }
-           // --- Fin Validaciones Iniciales ---
-   
-           const saleType = $saleTypeSelect.val();
-           let subscriptionData = null;
-   
-           // --- Validar Campos de Suscripción (si aplica) ---
-           if (saleType === 'subscription') {
-               const title = $subscriptionTitle.val().trim();
-               const expiryDate = $subscriptionExpiryDate.val();
-               const color = $subscriptionColor.val();
-               if (!title || !expiryDate) {
-                   if (typeof Swal !== 'undefined') Swal.fire('Error', 'Por favor, completa el título y la fecha de vencimiento de la suscripción.', 'error');
-                   // Intentar enfocar el primer campo inválido
-                   if (!title) $subscriptionTitle.focus(); else $subscriptionExpiryDate.focus();
-                   return; // Detener si faltan datos de suscripción base
-               }
-               subscriptionData = { title: title, expiry_date: expiryDate, color: color };
-   
-               // --- INICIO: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
-               // Obtener el contenedor del selector (ya lo usamos antes)
-               const $profileSelectorWrap = $('.pos-streaming-profile-selector-wrap');
-               const selectedProfileId = $('#pos-streaming-profile-select').val(); // Obtener ID del select
-   
-               // SOLO validar si el tipo es suscripción Y el selector está visible
-               if ($profileSelectorWrap.is(':visible') && (!selectedProfileId || selectedProfileId === '')) {
-                   // Error: Se requiere perfil para suscripción
-                   if (typeof Swal !== 'undefined') Swal.fire('Error', 'Debes seleccionar un perfil disponible para la suscripción.', 'error');
-                   $('#pos-streaming-profile-select').focus(); // Enfocar el selector
-                   return; // Detener la ejecución de completeSale
-               }
-               // --- FIN: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
-           }
-           // --- Fin Validar Campos de Suscripción ---
-   
-   
-           // --- Construir Datos del Pedido ---
-           const orderData = {
-               customer_id: currentCustomerId, // Será 0 si es invitado
-               payment_method: selectedPaymentMethod,
-               payment_method_title: $paymentMethodSelect.find('option:selected').text(),
-               set_paid: (saleType !== 'credit'), // No marcar como pagado si es crédito
-               billing: {}, // Se llenarán en el backend si es cliente existente
-               shipping: {}, // No usado por ahora
-               line_items: cart.map(item => ({
-                   product_id: item.product_id,
-                   variation_id: item.variation_id || 0,
-                   quantity: item.quantity,
-                   // 'total' y 'subtotal' se calculan en backend basado en 'price'
-                   price: item.current_price // Enviar el precio unitario actual
-               })),
-               meta_data: [
-                   { key: '_pos_sale_type', value: saleType } // Guardar siempre el tipo de venta
-               ],
-               coupon_lines: [],
-               pos_order_note: $orderNoteInput.val().trim()
-           };
-   
-           // Añadir datos del cupón si existe
-           if (appliedCoupon) {
-               orderData.coupon_lines.push({ code: appliedCoupon.code });
-           }
-   
-           // Añadir metadatos de suscripción base si aplica
-           if (subscriptionData) {
-               orderData.meta_data.push({ key: '_pos_subscription_title', value: subscriptionData.title });
-               orderData.meta_data.push({ key: '_pos_subscription_expiry_date', value: subscriptionData.expiry_date });
-               orderData.meta_data.push({ key: '_pos_subscription_color', value: subscriptionData.color });
-           }
-   
-           // --- INICIO: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
-           if (saleType === 'subscription') {
-               const selectedProfileId = $('#pos-streaming-profile-select').val();
-               // Ya validamos que no esté vacío arriba, pero volvemos a comprobar por seguridad
-               if (selectedProfileId && selectedProfileId !== '') {
-                   orderData.meta_data.push({
-                       key: '_pos_assigned_profile_id',
-                       value: selectedProfileId
-                   });
-                   console.log('Añadido _pos_assigned_profile_id al pedido:', selectedProfileId);
-               }
-               // No necesitamos un 'else' aquí porque ya validamos antes
-           }
-           // --- FIN: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
-   
-           console.log("Datos del pedido a enviar:", orderData);
-           // --- Fin Construir Datos del Pedido ---
-   
-   
-           // --- Enviar Pedido ---
-           isLoadingCheckoutAction = true;
-           completeSaleButton.prop('disabled', true).text(posBaseParams.i18n?.processing || 'Procesando...');
-           showLoading(posBaseParams.i18n?.creating_order || 'Creando pedido...');
-   
-           createOrder(orderData) // Llamar a la función que hace el AJAX POST a /orders
-               .done(response => {
-                   hideLoading();
-                   if (typeof Swal !== 'undefined') {
-                       Swal.fire({
-                           icon: 'success',
-                           title: posBaseParams.i18n?.order_created_success || '¡Pedido Creado!',
-                           text: `Pedido #${response.id} creado correctamente.`,
-                           showConfirmButton: true
-                       });
-                   }
-                   resetPOSState(); // Limpiar carrito, cliente, etc.
-                   refreshSalesDataTable(); // Actualizar tabla de ventas
-                   // --- INICIO: AÑADIR ESTA LÍNEA ---
-                   if (calendar && typeof calendar.refetchEvents === 'function') {
-                       console.log('Refrescando eventos del calendario...');
-                       calendar.refetchEvents(); // Vuelve a pedir los eventos al endpoint API
-                   } else {
-                       console.warn('Intento de refrescar calendario, pero no está inicializado o no es válido.');
-                   }
-   
-               })
-               .fail(error => {
-                   hideLoading();
-                   console.error("Error creando pedido:", error);
-                   const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.order_created_error || 'Error al crear el pedido.';
-                   if (typeof Swal !== 'undefined') Swal.fire('Error', errorMsg, 'error');
-                   // No resetear estado si falla, para que el usuario pueda intentar de nuevo
-               })
-               .always(() => {
-                   isLoadingCheckoutAction = false;
-                   completeSaleButton.text(posBaseParams.i18n?.complete_sale || 'Completar Venta');
-                   // El estado del botón se actualizará basado en si hay cliente/carrito
-                   updateCheckoutButtonState();
-               });
-           // --- Fin Enviar Pedido ---
-       } // Fin handleCompleteSale
-   
+    function handleCompleteSale() {
+        if (isLoadingCheckoutAction || completeSaleButton.prop('disabled')) {
+            console.warn("Checkout en progreso o botón deshabilitado.");
+            return;
+        }
+
+        // --- Validaciones Iniciales ---
+        if (cart.length === 0) {
+            if (typeof Swal !== 'undefined') Swal.fire('Error', 'El carrito está vacío.', 'error');
+            return;
+        }
+        if (!currentCustomerId) {
+            // Permitir venta como invitado si currentCustomerId es null o 0
+                if (currentCustomerId !== 0 && currentCustomerId !== null) {
+                    if (typeof Swal !== 'undefined') Swal.fire('Error', 'No se ha seleccionado un cliente.', 'error');
+                    return;
+                }
+                console.log("Procediendo con venta como invitado (Customer ID: 0)");
+                currentCustomerId = 0; // Asegurar que sea 0 para invitado
+        }
+        const selectedPaymentMethod = $paymentMethodSelect.val();
+        if (!selectedPaymentMethod) {
+            if (typeof Swal !== 'undefined') Swal.fire('Error', 'Selecciona un método de pago.', 'error');
+            return;
+        }
+        // --- Fin Validaciones Iniciales ---
+
+        const saleType = $saleTypeSelect.val();
+        let subscriptionData = null;
+
+        // --- Validar Campos de Suscripción (si aplica) ---
+        if (saleType === 'subscription') {
+            const title = $subscriptionTitle.val().trim();
+            const expiryDate = $subscriptionExpiryDate.val();
+            const color = $subscriptionColor.val();
+            if (!title || !expiryDate) {
+                if (typeof Swal !== 'undefined') Swal.fire('Error', 'Por favor, completa el título y la fecha de vencimiento de la suscripción.', 'error');
+                // Intentar enfocar el primer campo inválido
+                if (!title) $subscriptionTitle.focus(); else $subscriptionExpiryDate.focus();
+                return; // Detener si faltan datos de suscripción base
+            }
+            subscriptionData = { title: title, expiry_date: expiryDate, color: color };
+
+            // --- INICIO: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
+            // Obtener el contenedor del selector (ya lo usamos antes)
+            const $profileSelectorWrap = $('.pos-streaming-profile-selector-wrap');
+            const selectedProfileId = $('#pos-streaming-profile-select').val(); // Obtener ID del select
+
+            // SOLO validar si el tipo es suscripción Y el selector está visible
+            if ($profileSelectorWrap.is(':visible') && (!selectedProfileId || selectedProfileId === '')) {
+                // Error: Se requiere perfil para suscripción
+                if (typeof Swal !== 'undefined') Swal.fire('Error', 'Debes seleccionar un perfil disponible para la suscripción.', 'error');
+                $('#pos-streaming-profile-select').focus(); // Enfocar el selector
+                return; // Detener la ejecución de completeSale
+            }
+            // --- FIN: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
+        }
+        // --- Fin Validar Campos de Suscripción ---
+
+
+        // --- Construir Datos del Pedido ---
+        const orderData = {
+            customer_id: currentCustomerId, // Será 0 si es invitado
+            payment_method: selectedPaymentMethod,
+            payment_method_title: $paymentMethodSelect.find('option:selected').text(),
+            set_paid: (saleType !== 'credit'), // No marcar como pagado si es crédito
+            billing: {}, // Se llenarán en el backend si es cliente existente
+            shipping: {}, // No usado por ahora
+            line_items: cart.map(item => ({
+                product_id: item.product_id,
+                variation_id: item.variation_id || 0,
+                quantity: item.quantity,
+                // 'total' y 'subtotal' se calculan en backend basado en 'price'
+                price: item.current_price // Enviar el precio unitario actual
+            })),
+            meta_data: [
+                { key: '_pos_sale_type', value: saleType } // Guardar siempre el tipo de venta
+            ],
+            coupon_lines: [],
+            pos_order_note: $orderNoteInput.val().trim()
+        };
+
+        // Añadir datos del cupón si existe
+        if (appliedCoupon) {
+            orderData.coupon_lines.push({ code: appliedCoupon.code });
+        }
+
+        // Añadir metadatos de suscripción base si aplica
+        if (subscriptionData) {
+            orderData.meta_data.push({ key: '_pos_subscription_title', value: subscriptionData.title });
+            orderData.meta_data.push({ key: '_pos_subscription_expiry_date', value: subscriptionData.expiry_date });
+            orderData.meta_data.push({ key: '_pos_subscription_color', value: subscriptionData.color });
+        }
+
+        // --- INICIO: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
+        if (saleType === 'subscription') {
+            const selectedProfileId = $('#pos-streaming-profile-select').val();
+            // Ya validamos que no esté vacío arriba, pero volvemos a comprobar por seguridad
+            if (selectedProfileId && selectedProfileId !== '') {
+                orderData.meta_data.push({
+                    key: '_pos_assigned_profile_id',
+                    value: selectedProfileId
+                });
+                console.log('Añadido _pos_assigned_profile_id al pedido:', selectedProfileId);
+            }
+            // No necesitamos un 'else' aquí porque ya validamos antes
+        }
+        // --- FIN: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
+
+        console.log("Datos del pedido a enviar:", orderData);
+        // --- Fin Construir Datos del Pedido ---
+
+
+        // --- Enviar Pedido ---
+        isLoadingCheckoutAction = true;
+        completeSaleButton.prop('disabled', true).text(posBaseParams.i18n?.processing || 'Procesando...');
+        showLoading(posBaseParams.i18n?.creating_order || 'Creando pedido...');
+
+        createOrder(orderData) // Llamar a la función que hace el AJAX POST a /orders
+            .done(response => {
+                hideLoading();
+                if (typeof Swal !== 'undefined') {
+                    Swal.fire({
+                        icon: 'success',
+                        title: posBaseParams.i18n?.order_created_success || '¡Pedido Creado!',
+                        text: `Pedido #${response.id} creado correctamente.`,
+                        showConfirmButton: true
+                    });
+                }
+                resetPOSState(); // Limpiar carrito, cliente, etc.
+                refreshSalesDataTable(); // Actualizar tabla de ventas
+                // --- INICIO: AÑADIR ESTA LÍNEA ---
+                if (calendar && typeof calendar.refetchEvents === 'function') {
+                    console.log('Refrescando eventos del calendario...');
+                    calendar.refetchEvents(); // Vuelve a pedir los eventos al endpoint API
+                } else {
+                    console.warn('Intento de refrescar calendario, pero no está inicializado o no es válido.');
+                }
+
+            })
+            .fail(error => {
+                hideLoading();
+                console.error("Error creando pedido:", error);
+                const errorMsg = error?.responseJSON?.message || posBaseParams.i18n?.order_created_error || 'Error al crear el pedido.';
+                if (typeof Swal !== 'undefined') Swal.fire('Error', errorMsg, 'error');
+                // No resetear estado si falla, para que el usuario pueda intentar de nuevo
+            })
+            .always(() => {
+                isLoadingCheckoutAction = false;
+                completeSaleButton.text(posBaseParams.i18n?.complete_sale || 'Completar Venta');
+                // El estado del botón se actualizará basado en si hay cliente/carrito
+                updateCheckoutButtonState();
+            });
+        // --- Fin Enviar Pedido ---
+    } // Fin handleCompleteSale
     
 
     async function loadPaymentMethods() {
@@ -1218,7 +1215,6 @@ jQuery(function ($) {
         console.log('FullCalendar inicializado.');
     }
 
-    // --- **NUEVO:** Funciones de DataTables para Ventas ---
     /**
      * Inicializa la tabla de ventas con DataTables.
      */
@@ -1265,22 +1261,24 @@ jQuery(function ($) {
                     console.log("Respuesta del servidor:", xhr.responseText);
                     // Mostrar un mensaje de error al usuario en la tabla
                     $salesTable.find('tbody').html(
-                        '<tr><td colspan="7" class="dataTables_empty">' + (posBaseParams.i18n?.dt_error || 'Error al cargar los datos.') + '</td></tr>'
+                        '<tr><td colspan="5" class="dataTables_empty">' + (posBaseParams.i18n?.dt_error || 'Error al cargar los datos.') + '</td></tr>'
                     );
                     // Opcional: usar SweetAlert
                     // if (typeof Swal !== 'undefined') { Swal.fire('Error', 'No se pudieron cargar las ventas.', 'error'); }
                 }
             },
-            // Definición de las columnas (debe coincidir con el orden en HTML y los datos de la API)
+      
+            // Definición de las columnas (5 columnas agrupadas)
             columns: [
-                { data: 0, name: 'ID' },         // Pedido # (índice 0 en la API)
-                { data: 1, name: 'date' },       // Fecha (índice 1)
-                { data: 2, name: 'customer' },   // Cliente (índice 2)
-                { data: 3, name: 'total', className: 'dt-body-right' }, // Total (índice 3), alineado a la derecha
-                { data: 4, name: '_pos_sale_type' }, // Tipo (POS) (índice 4)
-                { data: 5, name: 'note', orderable: false, searchable: false }, // Notas (índice 5), no ordenable/buscable por defecto
-                { data: 6, name: 'meta', orderable: false, searchable: false }  // Meta (índice 6), no ordenable/buscable
+                // Índice API | Propiedad 'data' | 'name' (para referencia/server-side) | Opciones
+                { data: 0, name: 'date_created', orderable: true, searchable: false }, // Col 1 (Pedido/Fecha/Tipo) - Ordenar por Fecha
+                { data: 1, name: 'customer', orderable: true, searchable: true },     // Col 2 (Cliente/Contacto) - Ordenar por Nombre (aprox), Permitir búsqueda
+                { data: 2, name: 'products', orderable: false, searchable: true },    // Col 3 (Producto(s)) - No ordenable, Permitir búsqueda (server-side)
+                { data: 3, name: '_pos_subscription_expiry_date', orderable: true, searchable: false }, // Col 4 (Vencimiento/Historial) - Ordenar por Vencimiento
+                { data: 4, name: 'details', orderable: false, searchable: true, className: 'pos-dt-column-wide' } // Col 5 (Notas/Detalles) - No ordenable, Permitir búsqueda, Clase ancha
             ],
+         
+            
             // Configuración del idioma usando las traducciones de posBaseParams
             language: {
                 processing: posBaseParams.i18n?.dt_processing || 'Procesando...',
@@ -1375,6 +1373,81 @@ jQuery(function ($) {
         completeSaleButton.on('click', handleCompleteSale);
     }
 
+     // --- Listener para Enviar SMS desde Modal Thickbox (CORREGIDO) ---
+     // Delegar el evento al 'document' para asegurar que funcione incluso cuando Thickbox mueva el modal
+     $(document).on('click', '.pos-send-sms-button', function(event) {
+         event.preventDefault(); // Prevenir comportamiento por defecto del botón
+ 
+         const sendButton = $(this); // 'this' es el botón clickeado
+         // Encontrar el contenedor del modal usando closest() desde el botón
+         const modalWrapper = sendButton.closest('.pos-sms-modal-wrapper');
+         if (!modalWrapper.length) {
+             console.error('No se encontró el contenedor del modal (.pos-sms-modal-wrapper)');
+             return; // Salir si no se encuentra el contenedor
+         }
+ 
+         // Seleccionar elementos dentro del contexto del modal encontrado
+         const feedbackDiv = modalWrapper.find('.pos-sms-feedback');
+         const spinner = modalWrapper.find('.spinner');
+         const messageTextarea = modalWrapper.find('.pos-sms-message-input');
+         const phone = sendButton.data('phone');
+         const orderId = sendButton.data('orderId'); // Opcional
+         const message = messageTextarea.length ? messageTextarea.val().trim() : '';
+ 
+         // --- El resto de la lógica (validación, AJAX, feedback) permanece igual ---
+ 
+         // Validar mensaje
+         if (!message) {
+             feedbackDiv.text(posBaseParams.i18n.error_message_required || 'Por favor, escribe un mensaje.').css('color', 'red');
+             return;
+         }
+         if (!phone) {
+             feedbackDiv.text(posBaseParams.i18n.error_phone_missing || 'Falta el número de teléfono.').css('color', 'red');
+             return;
+         }
+ 
+         // Mostrar estado de carga
+         sendButton.prop('disabled', true);
+         if (spinner.length) spinner.addClass('is-active');
+         feedbackDiv.text(posBaseParams.i18n.sending_message || 'Enviando mensaje...').css('color', 'inherit');
+ 
+         // Preparar datos para AJAX
+         const formData = new URLSearchParams();
+         formData.append('action', 'pos_base_send_pos_sms');
+         formData.append('_ajax_nonce', posBaseParams.send_sms_nonce);
+         formData.append('phone', phone);
+         formData.append('message', message);
+         // formData.append('order_id', orderId);
+ 
+         // Petición Fetch
+         fetch(posBaseParams.ajax_url, {
+             method: 'POST',
+             body: formData
+         })
+         .then(response => response.json())
+         .then(result => {
+             if (result.success) {
+                 feedbackDiv.text(result.data || (posBaseParams.i18n.message_sent_success || 'Mensaje enviado con éxito.')).css('color', 'green');
+                 if (messageTextarea.length) messageTextarea.val('');
+                 setTimeout(() => {
+                     tb_remove(); // Cerrar Thickbox
+                 }, 1500);
+             } else {
+                 throw new Error(result.data || (posBaseParams.i18n.error_sending_message || 'Error al enviar el mensaje.'));
+             }
+         })
+         .catch(error => {
+             console.error('Error sending POS SMS:', error);
+             feedbackDiv.text(error.message || (posBaseParams.i18n.error_sending_message || 'Error al enviar el mensaje.')).css('color', 'red');
+         })
+         .finally(() => {
+             sendButton.prop('disabled', false);
+             if (spinner.length) spinner.removeClass('is-active');
+         });
+     });
+     // --- Fin Listener Enviar SMS (CORREGIDO) ---
+ 
+    
     // --- Inicialización ---
     function init() {
         console.log('POS Streaming App Initializing...');

@@ -110,7 +110,7 @@ function pos_evolution_api_render_instance_page() {
                                 <p style="margin: 5px 0;"><strong><?php esc_html_e('Propietario (WID):', 'pos-base'); ?></strong> <span id="instance-owner-value">-</span></p> <?php // Aclaramos que Owner es el WID ?>
                             </div>
                         </div>
-                        
+
 
                          <?php // Área para mostrar mensajes generales de éxito/error/advertencia ?>
                          <div id="status-message-area" style="margin-top: 10px;">
@@ -147,11 +147,11 @@ function pos_evolution_api_render_instance_page() {
             <input type="hidden" id="managed-instance-name-input" value="<?php echo esc_attr( $managed_instance_name ); ?>">
             <input type="hidden" id="evolution-api-nonce" value="<?php echo esc_attr( wp_create_nonce( 'evolution_api_ajax_nonce' ) ); ?>">
 
-        <?php endif; // Fin de if ($is_configured) ?>
+        <?php endif; ?>
     </div>
 
     <?php
-} // Fin de pos_evolution_api_render_instance_page()
+}
 
 
 /**
@@ -162,30 +162,19 @@ function pos_evolution_api_render_instance_page() {
  */
 function pos_evolution_api_enqueue_manager_scripts( $hook_suffix ) {
 
-    // Determinar el hook_suffix correcto para nuestra subpágina.
-    $target_hook = 'pos-base_page_pos-evolution-api-instance'; // Ajusta si es diferente
+    //1. Determinar el hook_suffix correcto para nuestra subpágina.
+    $target_hook = 'pos-base_page_pos-evolution-api-instance';
 
-    // Solo encolar en nuestra página específica
     if ( $hook_suffix !== $target_hook ) {
         return;
     }
-    error_log("[EVO_API_ENQUEUE] Enqueueing scripts for hook: " . $hook_suffix); // Log para confirmar
-
-    // --- Manejo de SweetAlert2 ---
-    // Asumimos que POS Base lo encola con el handle 'pos-base-sweetalert2'
-    // Si no es así, descomenta la línea del CDN o encola una versión local.
-    // $sweetalert_handle = 'pos-base-sweetalert2'; // <- AJUSTA ESTE HANDLE SI ES DIFERENTE
-    wp_enqueue_script( 'sweetalert2', 'https://cdn.jsdelivr.net/npm/sweetalert2@11', [], null, true ); // CDN como fallback si no existe el de POS Base
 
     // 2. Encolar nuestro script principal
     $script_handle = 'pos-evolution-api-manager';
     $script_url = EVOLUTION_API_MODULE_URL . 'assets/js/instance-manager.js';
-    // Usar filemtime para versionado automático y evitar caché
     $script_version = file_exists( EVOLUTION_API_MODULE_DIR . 'assets/js/instance-manager.js' ) ? filemtime( EVOLUTION_API_MODULE_DIR . 'assets/js/instance-manager.js' ) : '1.0.0';
-    // Añadir dependencia de SweetAlert (usando el handle correcto)
-    $dependencies = ['jquery', 'sweetalert2']; // Dependencias
-
-    wp_enqueue_script( $script_handle, $script_url, $dependencies, $script_version, true ); // true para cargar en footer
+    $dependencies = ['jquery', 'pos-base-sweetalert2']; 
+    wp_enqueue_script( $script_handle, $script_url, $dependencies, $script_version, true );
 
     // 3. Localizar datos para pasar a nuestro script
     $settings = pos_evolution_api_get_settings();
@@ -207,8 +196,7 @@ function pos_evolution_api_enqueue_manager_scripts( $hook_suffix ) {
             'qrLoading'             => __( 'Generando código QR...', 'pos-base' ),
             'qrObtained'            => __( 'Código QR obtenido.', 'pos-base' ),
             'errorNoQr'             => __( 'No se pudo obtener el código QR...', 'pos-base' ),
-
-            // Textos específicos de acciones
+            'statusLoading'         => __( 'Cargando estado...', 'pos-base' ),
             'createTitle'           => __( 'Crear Nueva Instancia', 'pos-base' ),
             'instanceNameLabel'     => __( 'Nombre para la instancia', 'pos-base' ),
             'instanceNamePlaceholder' => __( 'Ej: tienda_principal (solo letras, números, -, _)', 'pos-base' ),
@@ -224,22 +212,17 @@ function pos_evolution_api_enqueue_manager_scripts( $hook_suffix ) {
             'deleteConfirmPrompt'   => __( 'Escribe el nombre de la instancia para confirmar:', 'pos-base' ),
             'deleteConfirm'         => __( 'Sí, eliminarla', 'pos-base' ),
             'errorNameMismatch'     => __( 'El nombre no coincide. Escribe exactamente:', 'pos-base' ),
-
-            // Textos para nuevas funcionalidades UI
+            'errorDeleteConnected'  => __( 'Debes desconectar la instancia antes de eliminarla.', 'pos-base' ),
             'statusRefreshed'       => __( 'Estado actualizado.', 'pos-base' ),
             'logCleared'            => __( 'Log limpiado.', 'pos-base' ),
             'logInitialized'        => __( 'Interfaz de gestión inicializada.', 'pos-base' ),
             'autoRefreshing'        => __( 'Actualizando estado automáticamente...', 'pos-base' ),
-            'currentState'          => __( 'Estado actual:', 'pos-base' ), // Usado en JS para construir mensaje
-            'connectedAs'           => __( 'Conectado como:', 'pos-base' ), // Usado en JS
+            'currentState'          => __( 'Estado actual:', 'pos-base' ),
+            'connectedAs'           => __( 'Conectado como:', 'pos-base' ),
         ],
     ];
 
     wp_localize_script( $script_handle, 'evolutionApiData', $data_for_js );
-    error_log("[EVO_API_ENQUEUE] Data localized for JS: " . print_r($data_for_js, true)); // Log para confirmar datos
-
-     // Opcional: Encolar un archivo CSS si tienes estilos específicos
-     // wp_enqueue_style('pos-evolution-api-manager-styles', EVOLUTION_API_MODULE_URL . 'assets/css/instance-manager.css', [], $script_version);
 }
 // Enganchar la función de encolado al hook correcto
 add_action( 'admin_enqueue_scripts', 'pos_evolution_api_enqueue_manager_scripts' );

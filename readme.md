@@ -7,7 +7,7 @@
 
 **POS Base** proporciona una solución de Punto de Venta (POS) robusta y flexible, integrada directamente en tu panel de administración de WordPress. Construido con un **enfoque central en la modularidad**, ofrece funcionalidades esenciales de POS permitiendo, al mismo tiempo, una extensión fluida a través de módulos dedicados para satisfacer diversas necesidades comerciales.
 
-Este plugin transforma tu configuración de WordPress/WooCommerce en un eficiente centro de ventas, permitiendo la gestión directa de ventas, interacción con clientes y procesamiento de pedidos desde una interfaz unificada. Su arquitectura extensible lo hace ideal para negocios que requieren características de POS personalizadas más allá de las ofertas estándar, como gestión de suscripciones, integraciones de servicios (como WhatsApp) o flujos de trabajo específicos de la industria.
+Este plugin transforma tu configuración de WordPress/WooCommerce en un eficiente centro de ventas, permitiendo la gestión directa de ventas, interacción con clientes y procesamiento de pedidos desde una interfaz unificada. Su arquitectura extensible lo hace ideal para negocios que requieren características de POS personalizadas más allá de las ofertas estándar, como gestión de suscripciones, integraciones de servicios (como WhatsApp vía Evolution API) o flujos de trabajo específicos de la industria.
 
 ---
 
@@ -26,8 +26,16 @@ Este plugin transforma tu configuración de WordPress/WooCommerce en un eficient
     *   Notas del pedido.
 *   **Creación de Pedidos:** Genera pedidos estándar de WooCommerce.
 *   **Vista de Calendario:** Visualiza las fechas de vencimiento de la "Suscripción Base" usando FullCalendar.
-*   **Historial de Ventas:** Registro de ventas potente, con búsqueda y ordenamiento, usando DataTables con procesamiento del lado del servidor para un rendimiento óptimo.
-*   **Metabox en Pedido de WooCommerce:** Permite editar datos específicos del POS (Tipo de Venta, Suscripción Base, datos de módulos) directamente en la pantalla de edición de pedidos de WooCommerce.
+*   **Historial de Ventas (Mejorado):** Registro de ventas potente, con búsqueda y ordenamiento, usando DataTables con procesamiento del lado del servidor.
+    *   **Columnas Agrupadas:** Presenta la información en 5 columnas optimizadas:
+        1.  `Pedido / Fecha / Tipo`: Incluye ID del pedido (enlace), fecha, tipo de venta (badge) y acciones (Ver Pedido, Enviar Mensaje).
+        2.  `Cliente / Contacto`: Muestra avatar, nombre del cliente (enlace si es usuario registrado) y número de teléfono (enlace `tel:`).
+        3.  `Producto(s)`: Lista los productos del pedido (nombre y cantidad).
+        4.  `Vencimiento / Historial`: Muestra la fecha de vencimiento de la suscripción (si aplica) con formato legible y tiempo relativo (ej. "en 3 días", "hace 2 semanas"). Incluye estadísticas clave del cliente (Total Pedidos, Gasto Total, Valor Medio).
+        5.  `Notas / Detalles`: Muestra la última "Nota para el Cliente" del pedido y detalles relevantes del POS como el Título de la Suscripción y el Perfil de Streaming asignado (si el módulo está activo). Columna con ancho ajustable vía CSS.
+    *   **Búsqueda Mejorada:** La búsqueda del lado del servidor incluye ID, nombre/email cliente, nombre producto, número de teléfono y título de suscripción.
+    *   **Ordenación Mejorada:** Permite ordenar por Fecha, Nombre de Cliente (aproximado), y Fecha de Vencimiento.
+*   **Metabox en Pedido de WooCommerce:** Permite editar datos específicos del POS (Tipo de Venta, Suscripción Base, datos de módulos) directamente en la pantalla de edición de pedidos de WooCommerce. Muestra estado de envío de recordatorio (si módulo Evolution API está activo).
 *   **API REST Segura:** Comunicación asíncrona (`/pos-base/v1/`) para una experiencia frontend rápida.
 *   **Arquitectura Modular:** Extiende fácilmente la funcionalidad a través de módulos separados (ver abajo).
 *   **Página de Configuración:** Activación/desactivación simple de los módulos detectados.
@@ -39,6 +47,8 @@ Este plugin transforma tu configuración de WordPress/WooCommerce en un eficient
 *   **WordPress:** Versión 5.5 o superior.
 *   **WooCommerce:** Versión 4.0 o superior.
 *   **PHP:** Versión 7.4 o superior.
+*   **WordPress Cron:** Debe estar habilitado y funcionando correctamente para las tareas programadas (ej. recordatorios).
+*   **Thickbox:** Debe estar cargado en el admin para los modales (generalmente incluido por defecto, pero `add_thickbox()` se usa para asegurar).
 
 ---
 
@@ -60,12 +70,13 @@ Este plugin transforma tu configuración de WordPress/WooCommerce en un eficient
 
 1.  **Acceso:** Encuentra el elemento de menú "**POS Base**" en la barra lateral de administración de WordPress.
 2.  **Interfaz:** Explora las pestañas principales:
-    *   **POS:** Realiza operaciones de venta (buscar productos/clientes, gestionar carrito, checkout).
+    *   **POS:** Realiza operaciones de venta.
     *   **Calendario:** Visualiza los próximos vencimientos de "Suscripción Base".
-    *   **Ventas:** Revisa el historial de transacciones del POS.
+    *   **Ventas:** Revisa el historial de transacciones del POS con la nueva estructura de tabla.
 3.  **Configuración:**
     *   Navega a "POS Base" -> "Configuración".
-    *   Activa los módulos deseados (ej., Streaming, WhatsApp) marcando las casillas y guardando los cambios. Las características específicas del módulo estarán disponibles en la interfaz del POS u otras áreas relevantes.
+    *   Activa los módulos deseados (ej., Streaming, Evolution API) marcando las casillas y guardando los cambios.
+    *   Configura los ajustes específicos de cada módulo activo (ej., URL y Token para Evolution API).
 4.  **Instrucciones Detalladas:** Para una guía paso a paso sobre el uso de la interfaz del POS, consulta el archivo `manual.md`.
 
 ---
@@ -75,7 +86,7 @@ Este plugin transforma tu configuración de WordPress/WooCommerce en un eficient
 POS Base está diseñado para la extensibilidad:
 
 *   **Plugin Núcleo (`pos-base`):** Proporciona la interfaz de POS fundamental, APIs y características esenciales.
-*   **Módulos (directorio `modules/`):** Contiene subdirectorios, cada uno representando un conjunto distinto de características (ej., `streaming`, `whatsapp`).
+*   **Módulos (directorio `modules/`):** Contiene subdirectorios, cada uno representando un conjunto distinto de características (ej., `streaming`, `whatsapp`, `evolution-api`).
 *   **Detección y Activación:** El plugin núcleo detecta automáticamente los módulos ubicados en el directorio `modules/`. Pueden ser habilitados/deshabilitados a través de la página "Configuración" (ajustes guardados en la opción `pos_base_active_modules`).
 *   **Carga Dinámica:** El plugin núcleo carga el archivo principal (ej., `pos-{slug}-module.php`) de cada módulo *activo* durante la inicialización.
 *   **Integración Basada en Hooks:** Los módulos interactúan con el núcleo y WordPress **exclusivamente a través de actions y filters**. Esto asegura la mantenibilidad y previene conflictos. Hooks clave proporcionados por POS Base incluyen (ejemplos):
@@ -83,9 +94,10 @@ POS Base está diseñado para la extensibilidad:
     *   `pos_base_register_module_rest_routes`: Para añadir endpoints de API REST específicos del módulo.
     *   `pos_base_checkout_fields`: Para añadir campos personalizados a la sección de checkout del POS.
     *   `pos_base_prepare_order_meta`: Para guardar datos del módulo cuando se crea un pedido.
-    *   `pos_base_sales_datatable_meta_column`: Para mostrar datos del módulo en la tabla del historial de Ventas.
+    *   `pos_base_sales_datatable_meta_column`: **(Obsoleto/Reemplazado)** La tabla ahora se construye directamente en la API.
     *   `pos_base_metabox_fields`: Para añadir campos al metabox de edición de pedidos de WooCommerce.
     *   `pos_base_save_metabox_data`: Para guardar datos del módulo desde el metabox.
+*   **Tareas Programadas (Cron):** Los módulos pueden registrar sus propias tareas WP-Cron (ej., el módulo Evolution API para recordatorios).
 
 ---
 
@@ -99,8 +111,8 @@ POS Base está diseñado para la extensibilidad:
     *   **Integración Checkout POS:** Añade un desplegable **Select2** al checkout del POS (solo para ventas tipo "Suscripción") listando perfiles disponibles (`_pos_profile_status` = 'available'), mostrando nombre del perfil y de la cuenta padre.
     *   **Meta del Pedido:** Guarda el ID del perfil seleccionado en el campo meta `_pos_assigned_profile_id` del pedido.
     *   **Actualización de Estado:** Establece automáticamente el estado del perfil seleccionado a 'assigned'.
-    *   **Integración Metabox Edición Pedido:** Añade un desplegable HTML estándar (sin Select2) al metabox del POS en la pantalla de edición de pedidos de WC, permitiendo ver/cambiar el perfil asignado post-venta y actualizando correctamente los estados de los perfiles.
-    *   **Integración Tabla de Ventas:** Muestra el nombre del perfil asignado en la columna "Meta" del historial de Ventas.
+    *   **Integración Metabox Edición Pedido:** Añade un desplegable HTML estándar al metabox del POS en la pantalla de edición de pedidos de WC, permitiendo ver/cambiar el perfil asignado post-venta y actualizando correctamente los estados de los perfiles.
+    *   **Integración Tabla de Ventas:** Muestra el nombre del perfil asignado en la columna "Notas / Detalles" del historial de Ventas.
     *   **API REST:** Proporciona el endpoint `GET /pos-base/v1/streaming/available-profiles` para alimentar el desplegable Select2 en el frontend del POS.
 
 ### 3.2. Módulo WhatsApp (`modules/whatsapp/`)
@@ -109,9 +121,32 @@ POS Base está diseñado para la extensibilidad:
 *   **Características:**
     *   **Configuración:** Añade ajustes bajo "POS Base" -> "Configuración" para definir número de destino, mensaje por defecto, tooltip del botón y título del popup (guardado en `pos_whatsapp_settings`).
     *   **Botón Flotante:** Muestra un botón flotante en todo el sitio que abre un popup/modal, dirigiendo a los usuarios a WhatsApp con información pre-rellenada según los ajustes.
-    *   **Botón Página de Producto:** Añade un botón "Consultar por WhatsApp" en las páginas de producto de WooCommerce, pre-rellenando el mensaje con detalles del producto.
+    *   **Botón Página de Producto:** Añade un botón "Consultar por WhatsApp" en las páginas de producto de WooCommerce.
     *   **Botón Página de Checkout:** Añade un botón "Completar Pedido por WhatsApp" en la página de checkout de WooCommerce.
     *   **Assets Frontend:** Encola CSS (`floating-button.css`) y JS (`floating-button.js`) específicos para la funcionalidad del botón/popup.
+
+### 3.3. Módulo Evolution API (`modules/evolution-api/`) **(Nuevo)**
+
+*   **Propósito:** Conecta el POS Base con una instancia de Evolution API para enviar mensajes de WhatsApp. Gestiona una única instancia de la API y automatiza el envío de recordatorios de vencimiento.
+*   **Características:**
+    *   **Página de Gestión:** Añade un submenú "POS Base" -> "Evolution API" para gestionar la conexión con la instancia:
+        *   Crear nueva instancia.
+        *   Conectar/Reconectar (Mostrar QR).
+        *   Ver estado actual (conectado/desconectado, nombre perfil, etc.).
+        *   Desconectar instancia.
+        *   Eliminar instancia.
+        *   Log de actividad.
+    *   **Configuración:** Integra los campos para la URL de la API y el Token en la página principal de "Configuración" de POS Base.
+    *   **Recordatorios Automáticos de Vencimiento:**
+        *   Registra una tarea WP-Cron diaria (`pos_evolution_check_subscription_expiry`).
+        *   Busca pedidos de tipo "Suscripción" cuya fecha de vencimiento (`_pos_subscription_expiry_date`) sea *hoy*.
+        *   Si la API está configurada y conectada, envía automáticamente un mensaje de WhatsApp al cliente usando la **"Nota para el Cliente"** del pedido como contenido del mensaje.
+        *   Utiliza un metadato en el pedido (`_pos_evo_reminder_sent_YYYY-MM-DD`) para evitar envíos duplicados el mismo día.
+    *   **Integración Tabla de Ventas:**
+        *   Añade la acción "Enviar Mensaje" en la primera columna de la tabla de Ventas.
+        *   Al hacer clic, abre un modal (Thickbox) que permite escribir un mensaje personalizado y enviarlo al número de teléfono del cliente a través de la API de Evolution.
+    *   **Integración Metabox Edición Pedido:** Muestra si el recordatorio de vencimiento fue enviado para ese pedido en su fecha de vencimiento.
+    *   **API Client:** Incluye la clase `Evolution_API_Client` para encapsular las llamadas a la API externa.
 
 ---
 
@@ -170,5 +205,6 @@ Consulta la GNU General Public License v2.0 para más detalles.
     *   SweetAlert2 (Licencia MIT)
     *   FullCalendar (Licencia MIT)
     *   Intl-Tel-Input (Licencia MIT)
+    *   **DataTables Responsive Extension** (Licencia MIT - *Asegúrate de incluirla si la usas*)
 
 ---

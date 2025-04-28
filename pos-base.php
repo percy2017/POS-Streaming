@@ -1,9 +1,9 @@
 <?php
 /**
- * Plugin Name:       POS 2025
+ * Plugin Name:       Punto de Venta (POS BASE)
  * Plugin URI:        https://percyalvarez.com/plugins-wordpress
  * Description:       Plugin base para Punto de Venta (POS) en WordPress/WooCommerce, con soporte para módulos extensibles.
- * Version:           1.1.0
+ * Version:           1.1.1
  * Author:            Ing. Percy Alvarez
  * Author URI:        https://percyalvarez.com/
  * License:           GPL v2 or later
@@ -121,11 +121,15 @@ register_deactivation_hook( POS_BASE_PLUGIN_FILE, 'pos_base_deactivate' );
  */
 function pos_base_enqueue_assets( $hook_suffix ) {
 
-    // Solo cargar en la página principal del POS
-    $pos_page_hook = 'toplevel_page_pos-base';
-    if ( $hook_suffix !== $pos_page_hook ) {
-        return;
+    // Cargar en la página principal Y en todas las subpáginas de 'pos-base'
+    $pos_page_hook = 'toplevel_page_pos-base'; // Hook de la página principal
+    $is_pos_base_page = ( $hook_suffix === $pos_page_hook || strpos( $hook_suffix, 'pos-base_page_' ) === 0 );
+
+    if ( ! $is_pos_base_page ) { // <-- CONDICIÓN MODIFICADA
+        return; // Salir si no es una página de POS Base
     }
+    error_log("[POS Base Enqueue] Cargando assets base para hook: " . $hook_suffix); // Log para confirmar
+
 
     // Dependencias Nativas
     add_thickbox();
@@ -191,7 +195,8 @@ function pos_base_enqueue_assets( $hook_suffix ) {
         array(
             'ajax_url' => admin_url( 'admin-ajax.php' ),
             'nonce'    => wp_create_nonce( 'wp_rest' ),
-            'rest_url' => esc_url_raw( rest_url( 'pos-base/v1/' ) ), // Namespace correcto
+            'send_sms_nonce' => wp_create_nonce( 'pos_send_sms_nonce' ),
+            'rest_url' => esc_url_raw( rest_url( 'pos-base/v1/' ) ),
             'admin_url' => admin_url(),
             'intlTelInputUtilsScript' => esc_url( POS_BASE_ASSETS_URL . 'vendor/intl-tel-input/js/utils.js' ),
             'default_avatar_url' => get_avatar_url( 0, ['size' => 96, 'default' => 'mystery'] ),
@@ -252,7 +257,13 @@ function pos_base_enqueue_assets( $hook_suffix ) {
                 'dt_paginate_next' => __( 'Siguiente', 'pos-base' ),
                 'dt_paginate_last' => __( 'Último', 'pos-base' ),
                 'dt_aria_sortAscending' => __( ': activar para ordenar la columna ascendente', 'pos-base' ),
-                'dt_aria_sortDescending' => __( ': activar para ordenar la columna descendente', 'pos-base' )
+                'dt_aria_sortDescending' => __( ': activar para ordenar la columna descendente', 'pos-base' ),
+           
+                'sending_message' => __( 'Enviando mensaje...', 'pos-base' ), 
+                'message_sent_success' => __( 'Mensaje enviado con éxito.', 'pos-base' ),
+                'error_sending_message' => __( 'Error al enviar el mensaje.', 'pos-base' ),
+                'error_message_required' => __( 'Por favor, escribe un mensaje.', 'pos-base' ),
+                'error_phone_missing' => __( 'Falta el número de teléfono.', 'pos-base' ),
             )
         )
     );

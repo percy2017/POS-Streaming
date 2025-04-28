@@ -125,6 +125,35 @@ function pos_base_order_metabox_callback( $post_or_order_object ) {
     </p>
     <?php
 
+    // --- INICIO: Mostrar Estado de Recordatorio Enviado (Informativo) ---
+    $active_modules = get_option( 'pos_base_active_modules', [] );
+    $is_evolution_active = ( is_array( $active_modules ) && in_array( 'evolution-api', $active_modules, true ) );
+
+    // Mostrar solo si el módulo Evo está activo, es suscripción y hay fecha de vencimiento válida
+    if ( $is_evolution_active && $sale_type === 'subscription' && ! empty( $sub_expiry ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $sub_expiry ) ) {
+        $reminder_sent_meta_key = '_pos_evo_reminder_sent_' . $sub_expiry;
+        $reminder_sent = $order->get_meta( $reminder_sent_meta_key, true ); // Obtiene '1' o true si existe, '' si no
+
+        $status_text = $reminder_sent ? __('Sí', 'pos-base') : __('No', 'pos-base');
+        $formatted_expiry = ''; // Formatear fecha para mostrar
+        try {
+            $date_obj = new DateTime($sub_expiry);
+            $formatted_expiry = $date_obj->format(get_option('date_format')); // Usa formato de fecha de WP
+        } catch (Exception $e) {
+            $formatted_expiry = $sub_expiry; // Fallback a la fecha original si hay error
+        }
+        ?>
+        <p class="form-field form-field-wide pos-reminder-status">
+            <label><?php esc_html_e( 'Recordatorio Enviado:', 'pos-base' ); ?></label>
+            <span style="font-weight: bold;"><?php echo esc_html( $status_text ); ?></span>
+            <?php if ($reminder_sent): ?>
+                <span class="description"><?php printf( esc_html__( '(en fecha %s)', 'pos-base' ), esc_html( $formatted_expiry ) ); ?></span>
+            <?php endif; ?>
+            <span class="woocommerce-help-tip" data-tip="<?php esc_attr_e( 'Indica si el recordatorio de vencimiento por WhatsApp fue enviado en la fecha de vencimiento indicada.', 'pos-base' ); ?>"></span>
+        </p>
+        <?php
+    }
+
     // 3. Campo Perfil Streaming Asignado (SOLO si el módulo 'streaming' está activo)
     $active_modules = get_option( 'pos_base_active_modules', [] );
     $is_streaming_active = ( is_array( $active_modules ) && in_array( 'streaming', $active_modules, true ) );

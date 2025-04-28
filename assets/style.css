@@ -812,3 +812,34 @@
     }
 }
 
+/* Ajustar ancho de la columna Notas/Detalles en DataTables */
+#pos-sales-datatable td.pos-dt-column-wide,
+#pos-sales-datatable th.pos-dt-column-wide { /* Aplicar también a la cabecera si es necesario */
+    width: 30%; /* Ajusta el porcentaje según necesites */
+    min-width: 250px; /* O un ancho mínimo */
+}
+
+/* Estilos para el badge de tipo de venta */
+.pos-sale-type-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.8em;
+    font-weight: bold;
+    border-radius: 3px;
+    color: #fff;
+    text-transform: uppercase;
+    margin-top: 3px;
+}
+.pos-type-direct { background-color: #0073aa; } /* Azul WP */
+.pos-type-subscription { background-color: #d54e21; } /* Naranja WP */
+.pos-type-credit { background-color: #72aee6; } /* Azul claro WP */
+
+/* Estilos opcionales para las acciones de fila */
+#pos-sales-datatable .row-actions {
+    visibility: hidden;
+    padding-top: 2px;
+    font-size: 12px;
+}
+#pos-sales-datatable tr:hover .row-actions {
+    visibility: visible;
+}
