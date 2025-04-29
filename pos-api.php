@@ -819,6 +819,7 @@ function pos_base_api_validate_coupon( WP_REST_Request $request ) {
  * Maneja la creación del pedido, asignación de items, precios, metadatos,
  * cupones, y la actualización del estado del perfil de streaming si aplica.
  * MODIFICADO: Añade validación de perfil solo si el módulo streaming está activo.
+ * CORREGIDO: Ubicación del bloque set_date_created.
  */
 function pos_base_api_create_order( WP_REST_Request $request ) {
     // Parámetros ya validados/sanitizados por 'args'
@@ -831,6 +832,7 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
     $meta_data_input = $params['meta_data'] ?? [];
     $coupon_lines_input = $params['coupon_lines'] ?? [];
     $pos_order_note = $params['pos_order_note'] ?? ''; // Ya sanitizado
+    $pos_sale_date_input = $params['pos_sale_date'] ?? null; // Obtener la fecha enviada
 
     error_log('POS Base DEBUG: Entrando en pos_base_api_create_order. Cliente ID: ' . $customer_id);
 
@@ -844,15 +846,16 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
     }
 
     $order = null;
+    $order_id = 0; // Inicializar order_id
     $assigned_profile_id = null; // Inicializar variable para el ID del perfil asignado
 
     try {
-        // Crear el pedido con estado pendiente inicial
+        // --- Crear el pedido con estado pendiente inicial ---
         $order = wc_create_order( array( 'customer_id' => $customer_id, 'status' => 'wc-pending' ) );
         if ( is_wp_error( $order ) ) {
             throw new Exception( $order->get_error_message() );
         }
-        $order_id = $order->get_id();
+        $order_id = $order->get_id(); // Obtener el ID aquí
         error_log('POS Base DEBUG: Pedido creado con ID: ' . $order_id);
 
         // --- Establecer datos de facturación desde el cliente (si existe) ---
@@ -876,6 +879,34 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
 
         // Añadir nota automática del POS
         $order->add_order_note( __( 'Pedido creado desde POS Base.', 'pos-base' ), false, true ); // Nota pública
+
+        // ******** UBICACIÓN CORRECTA DEL BLOQUE DE FECHA ********
+        // --- INICIO: Establecer Fecha de Venta Personalizada ---
+        if ( ! empty( $pos_sale_date_input ) && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $pos_sale_date_input ) ) {
+            try {
+                // Combinar la fecha del input con la hora actual del servidor (zona horaria WP)
+                $current_time_str = current_time( 'H:i:s' );
+                $datetime_string = $pos_sale_date_input . ' ' . $current_time_str;
+
+                // Crear objeto DateTime para asegurar formato correcto y zona horaria
+                // Usamos wp_timezone() para obtener la zona horaria de WP
+                $datetime_obj = new DateTime( $datetime_string, wp_timezone() );
+
+                // Establecer la fecha creada en el pedido (en formato GMT/UTC para WC)
+                // AHORA $order SÍ EXISTE
+                $order->set_date_created( $datetime_obj->getTimestamp() ); // WC espera timestamp o string Y-m-d H:i:s GMT
+
+                error_log('POS Base DEBUG: Fecha de venta personalizada establecida para pedido ' . $order_id . ': ' . $datetime_obj->format('Y-m-d H:i:s P'));
+
+            } catch ( Exception $e ) {
+                error_log('POS Base DEBUG: Error al procesar fecha de venta personalizada: ' . $e->getMessage() . ' - Input: ' . $pos_sale_date_input);
+                // No detener la creación del pedido, pero registrar el error. WC usará la fecha actual por defecto.
+            }
+        } else {
+             error_log('POS Base DEBUG: No se recibió fecha de venta personalizada válida (Input: ' . print_r($pos_sale_date_input, true) . '). Se usará la fecha/hora actual.');
+        }
+        // --- FIN: Establecer Fecha de Venta Personalizada ---
+        // ******** FIN DEL BLOQUE MOVIDO ********
 
         // Añadir la nota personalizada si existe
         if ( ! empty( $pos_order_note ) ) {
@@ -1200,12 +1231,6 @@ function pos_base_api_get_calendar_events( WP_REST_Request $request ) {
     return new WP_REST_Response( $all_events, 200 );
 }
 
-
-/**
- * Callback API: Obtener datos de ventas para DataTables.
- * MODIFICADO (Opción 2 - Agrupado v2): 5 Columnas agrupadas (incluye Productos).
- * CORREGIDO: Asegura que recordsTotal y recordsFiltered sean enteros.
- */
 function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
     // Parámetros (sin cambios)
     $params = $request->get_params();
@@ -1213,78 +1238,24 @@ function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
     $start = $params['start'];
     $length = $params['length'];
     $search_value = $params['search']['value'] ?? '';
-    $order_params = $params['order'][0] ?? [];
-    $order_column_index = $order_params['column'] ?? 0; // Índice de la columna AGRUPADA
-    $order_dir = $order_params['dir'] ?? 'desc';
 
-    error_log('POS Base DEBUG: Entrando en pos_base_api_get_sales_for_datatable (v5 - Agrupado 5 Col). Draw: ' . $draw . ', Search: "' . $search_value . '"');
-
-    // --- Mapeo de columnas AGRUPADAS a campos de WC_Order_Query ---
-    $column_map = array(
-        0 => 'date_created',                // Col 1 (Pedido/Fecha/Tipo) -> Ordenar por Fecha
-        1 => 'billing_full_name',           // Col 2 (Cliente/Contacto) -> Ordenar por Nombre (aproximado)
-        2 => 'ID',                          // Col 3 (Producto(s)) -> No ordenable, fallback a ID
-        3 => '_pos_subscription_expiry_date', // Col 4 (Vencimiento/Historial) -> Ordenar por Vencimiento
-        4 => 'ID',                          // Col 5 (Notas/Detalles) -> No ordenable, fallback a ID
-    );
-    $orderby = $column_map[ $order_column_index ] ?? 'date_created'; // Ordenar por fecha por defecto
-    // --- Fin mapeo ---
-
-    // --- Argumentos base para WC_Order_Query ---
+    error_log("Dato completo recivido - ".json_encode( $params));
+    
     $args = array(
         'return'    => 'ids',
         'paginate'  => true,
         'limit'     => $length,
         'paged'     => $length > 0 ? ( $start / $length ) + 1 : 1,
-        // 'orderby' y 'order' se establecen más abajo
+        'orderby'   => 'date_created',
+        'order'     => 'DESC'
     );
-    // --- Fin argumentos base ---
-
-    // --- Ajustes para Ordenación (Ajustado para campos meta) ---
-    if ( $orderby === '_pos_subscription_expiry_date' ) { // Ordenar Col 4 por fecha
-        $args['meta_key'] = $orderby;
-        $args['orderby'] = 'meta_value_date';
-        $args['meta_type'] = 'DATE';
-    }
-    elseif ($orderby === 'billing_full_name') { // Ordenar Col 2 por nombre (fallback a ID)
-        // WC_Order_Query no soporta ordenar directamente por nombre formateado
-        // Usamos 'ID' como fallback o podrías intentar ordenar por meta 'first_name' o 'last_name'
-        $args['orderby'] = 'ID';
-    } else {
-        // Para otros casos (ID, date_created), WC_Order_Query los maneja directamente.
-        $args['orderby'] = $orderby;
-    }
-    $args['order'] = strtoupper($order_dir); // Establecer dirección de orden
-    // --- Fin Ajustes Ordenación ---
-
-    // --- Ajustes para Búsqueda ---
-    $meta_query_search = [];
+   
+    // Añadir búsqueda si existe
     if ( ! empty( $search_value ) ) {
-        $args['s'] = $search_value; // Búsqueda estándar (incluye nombres de items, ID, etc.)
-        $meta_query_search = array( // Búsqueda adicional en metas
-            'relation' => 'OR',
-            array( 'key' => '_billing_phone', 'value' => $search_value, 'compare' => 'LIKE' ),
-            array( 'key' => '_pos_subscription_title', 'value' => $search_value, 'compare' => 'LIKE' ),
-        );
+        $args['s'] = $search_value;
     }
 
-    // Combinar meta query de búsqueda con otras meta queries si las hubiera
-    if ( ! empty( $meta_query_search ) ) {
-        if ( isset( $args['meta_query'] ) ) {
-            // Si ya existe una meta_query (ej: para filtros futuros), combinarla
-            $args['meta_query'] = array(
-                'relation' => 'AND', // La búsqueda debe cumplir Y otros filtros
-                $args['meta_query'], // Filtros existentes
-                $meta_query_search   // Búsqueda en metas
-            );
-        } else {
-            // Si no había meta_query, simplemente añadir la de búsqueda
-            $args['meta_query'] = $meta_query_search;
-        }
-    }
-    // --- Fin Ajustes Búsqueda ---
-
-    error_log('POS Base DEBUG: WC_Order_Query args (v5 - Agrupado 5 Col): ' . print_r($args, true));
+    error_log('POS Base DEBUG: WC_Order_Query args: ' . print_r($args, true));
 
     // Ejecutar la consulta para obtener IDs paginados y filtrados
     $order_query = new WC_Order_Query( $args );
@@ -1307,8 +1278,6 @@ function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
     // Asegurarnos de que sea un entero, si no, usar 0
     $records_total = is_int($records_total_raw) ? $records_total_raw : 0;
     error_log('POS Base DEBUG: records_total_raw: ' . print_r($records_total_raw, true) . ', records_total (after check): ' . $records_total);
-
-    error_log('POS Base DEBUG: Registros encontrados (v5 - Agrupado 5 Col): ' . count($order_ids) . ', Filtrados: ' . $records_filtered . ', Total: ' . $records_total);
 
 
     // --- Preparar datos para la respuesta DataTables ---
@@ -1494,8 +1463,6 @@ function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
     error_log('POS Base DEBUG: pos_base_api_get_sales_for_datatable (v5 - Agrupado 5 Col) devolviendo respuesta para Draw ' . $draw);
     return new WP_REST_Response( $response_data, 200 );
 }
-
-
 
 
 

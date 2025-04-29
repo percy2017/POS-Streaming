@@ -48,7 +48,7 @@ jQuery(function ($) {
     const $selectedCustomerName = $('#selected-customer-name');
     const $changeCustomerBtn = $('#pos-change-customer-btn');
     const $customerSearchSection = $('.pos-customer-search');
-    const $customerNoteInput = $customerForm.find('#pos-customer-note'); // <-- AÑADIR ESTA LÍNEA
+    const $customerNoteInput = $customerForm.find('#pos-customer-note');
 
     // Checkout & Pago
     const $saleTypeSelect = $('#pos-sale-type');
@@ -60,7 +60,8 @@ jQuery(function ($) {
     const $couponCodeInput = $('#pos-coupon-code');
     const $applyCouponButton = $('#pos-apply-coupon-button');
     const $couponMessage = $('#pos-coupon-message');
-    const $orderNoteInput = $('#pos-order-note-input'); // <-- AÑADIR ESTA LÍNEA
+    const $orderNoteInput = $('#pos-order-note-input');
+    const $saleDateInput = $('#pos-sale-date');
 
     // Calendario
     let calendar = null; // Variable para guardar la instancia del calendario
@@ -968,6 +969,13 @@ jQuery(function ($) {
             if (typeof Swal !== 'undefined') Swal.fire('Error', 'Selecciona un método de pago.', 'error');
             return;
         }
+
+        const saleDate = $saleDateInput.val(); // <-- NUEVA LÍNEA
+        if (!saleDate) { // <-- NUEVA VALIDACIÓN (Opcional)
+            if (typeof Swal !== 'undefined') Swal.fire('Error', 'Por favor, selecciona una fecha de venta.', 'error');
+            $saleDateInput.focus();
+            return;
+        }
         // --- Fin Validaciones Iniciales ---
 
         const saleType = $saleTypeSelect.val();
@@ -1006,6 +1014,7 @@ jQuery(function ($) {
         // --- Construir Datos del Pedido ---
         const orderData = {
             customer_id: currentCustomerId, // Será 0 si es invitado
+            pos_order_note: $orderNoteInput.val().trim(),
             payment_method: selectedPaymentMethod,
             payment_method_title: $paymentMethodSelect.find('option:selected').text(),
             set_paid: (saleType !== 'credit'), // No marcar como pagado si es crédito
@@ -1022,7 +1031,8 @@ jQuery(function ($) {
                 { key: '_pos_sale_type', value: saleType } // Guardar siempre el tipo de venta
             ],
             coupon_lines: [],
-            pos_order_note: $orderNoteInput.val().trim()
+            pos_order_note: $orderNoteInput.val().trim(),
+            pos_sale_date: saleDate
         };
 
         // Añadir datos del cupón si existe
@@ -1164,6 +1174,15 @@ jQuery(function ($) {
         $subscriptionTitle.val(''); $subscriptionExpiryDate.val(''); $subscriptionColor.val('#3a87ad');
         $paymentMethodSelect.val('');
         $orderNoteInput.val('');
+        try {
+            // Obtener fecha actual en formato YYYY-MM-DD (zona horaria del navegador)
+            const today = new Date().toISOString().split('T')[0];
+            $saleDateInput.val(today);
+        } catch (e) {
+            console.error("Error al resetear fecha de venta:", e);
+            // Fallback por si falla toISOString o split
+            $saleDateInput.val('');
+        }
         appliedCoupon = null; $couponCodeInput.val('').prop('disabled', false); $couponMessage.empty().hide(); $applyCouponButton.show();
         console.log("Estado del POS reseteado después de la venta.");
     }

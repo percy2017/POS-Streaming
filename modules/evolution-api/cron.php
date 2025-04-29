@@ -15,19 +15,20 @@ defined( 'ABSPATH' ) or die( '¡Acceso no permitido!' );
 define( 'POS_EVOLUTION_EXPIRY_CRON_HOOK', 'pos_evolution_check_subscription_expiry' );
 
 /**
- * Programa el evento cron diario si no está ya programado.
+ * Programa el evento cron si no está ya programado.
  * Se ejecuta en admin_init para asegurar que se verifique regularmente.
+ * MODIFICADO: Cambiada la recurrencia a 'hourly' (cada hora).
  */
 function pos_evolution_schedule_expiry_check() {
     // Solo programar si no existe ya
     if ( ! wp_next_scheduled( POS_EVOLUTION_EXPIRY_CRON_HOOK ) ) {
-        // Programa el evento para ejecutarse diariamente a una hora específica (ej: 3 AM hora del servidor)
-        wp_schedule_event( strtotime('today 3:00am'), 'daily', POS_EVOLUTION_EXPIRY_CRON_HOOK );
-        error_log("[EVO_API_CRON] Evento '" . POS_EVOLUTION_EXPIRY_CRON_HOOK . "' programado para ejecución diaria.");
+        wp_schedule_event( time(), 'hourly', POS_EVOLUTION_EXPIRY_CRON_HOOK );
+        error_log("[EVO_API_CRON] Evento '" . POS_EVOLUTION_EXPIRY_CRON_HOOK . "' programado para ejecución HORARIA.");
     }
 }
-// Enganchar la función de programación a admin_init
+// Enganchar la función de programación a admin_init (esta línea no cambia)
 add_action( 'admin_init', 'pos_evolution_schedule_expiry_check' );
+
 
 /**
  * Función que se ejecuta con el cron: busca suscripciones que vencen hoy y envía recordatorios.

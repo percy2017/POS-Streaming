@@ -13,7 +13,7 @@ function pos_base_add_admin_menu() {
 
      // Menú Principal
      add_menu_page(
-        __( 'POS Base', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
+        __( 'Punto de Venta', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
         __( 'POS Base', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
         'manage_woocommerce',                   // Capacidad
         'pos-base',                             // <--- NUEVO SLUG PRINCIPAL
@@ -26,7 +26,7 @@ function pos_base_add_admin_menu() {
     add_submenu_page(
         'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
         __( 'Punto de Venta', 'pos-base' ),// Título de la página (Mantenemos 'pos-streaming' para contenido)
-        __( 'POS', 'pos-base' ),           // Título del submenú (Mantenemos 'pos-streaming')
+        __( 'Punto de Venta', 'pos-base' ),           // Título del submenú (Mantenemos 'pos-streaming')
         'manage_woocommerce',                   // Capacidad
         'pos-base',                             // <--- MISMO SLUG que add_menu_page (Actualizado)
         'pos_base_render_page'                  // <--- MISMA FUNCIÓN callback (Actualizado)
@@ -177,8 +177,19 @@ function pos_base_render_page() {
                         </div>
 
                         <div id="pos-checkout-area">
+                      
                             <h2><?php esc_html_e( 'Pago', 'pos-streaming' ); ?></h2>
                             <div class="pos-section-content">
+                            <label for="pos-sale-date" style="display: block; margin-bottom: 5px; font-weight: bold;">
+        <?php esc_html_e( 'Fecha Venta:', 'pos-base' ); ?>
+    </label>
+    <input type="date"
+           id="pos-sale-date"
+           name="pos_sale_date"
+           value="<?php echo esc_attr( date('Y-m-d', strtotime(current_time('mysql'))) ); ?>"
+           class="regular-text"
+           style="width: 100%;"
+    >
                                 <div class="pos-sale-type-area">
                                     <label for="pos-sale-type"><?php esc_html_e( 'Tipo de Venta:', 'pos-streaming' ); ?></label>
                                     <select id="pos-sale-type" name="pos_sale_type">
@@ -211,6 +222,7 @@ function pos_base_render_page() {
                                     ?>
                                 </div>
                                 <div class="pos-payment-method">
+                                    
                                     <label for="pos-payment-method"><?php esc_html_e( 'Método de Pago:', 'pos-streaming' ); ?></label>
                                     <select id="pos-payment-method" name="pos_payment_method">
                                         <option value="" disabled selected><?php esc_html_e( 'Cargando...', 'pos-streaming' ); ?></option>

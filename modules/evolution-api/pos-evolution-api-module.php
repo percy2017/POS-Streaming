@@ -11,7 +11,7 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// --- Constantes del Módulo ---
+// --- Constantes del Módulo --- 
 
 // Define la ruta del directorio del módulo.
 if ( ! defined( 'EVOLUTION_API_MODULE_DIR' ) ) {
