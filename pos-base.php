@@ -21,7 +21,7 @@ defined( 'ABSPATH' ) or die( '¡No tienes permiso para acceder aquí!' );
 
 
 // --- Constantes del Plugin ---
-define( 'POS_BASE_VERSION', '1.1.0' );
+define( 'POS_BASE_VERSION', '1.1.1' );
 define( 'POS_BASE_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'POS_BASE_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'POS_BASE_PLUGIN_FILE', __FILE__ );

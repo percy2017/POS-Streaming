@@ -186,7 +186,7 @@ function pos_base_enqueue_tour_scripts( $hook_suffix ) {
     // Si usas una variable global, asegúrate de que esté definida ANTES de que este hook se ejecute.
     // Ejemplo con variable global (asegúrate que se define en pos-page.php):
     global $pos_base_pos_page_hook_suffix;
-
+    error_log("Tour Debug: ".$hook_suffix);
     // Alternativa: Si no usas global, define el hook esperado directamente
     // $expected_hook_suffix = 'toplevel_page_pos-base'; // O el que sea correcto
 

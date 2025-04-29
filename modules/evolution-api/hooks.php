@@ -92,7 +92,11 @@ function pos_evolution_ajax_create_instance() {
     // Llamar a la API para crear
     // error_log( "[EVO_API_AJAX_CREATE] Attempting to create instance '{$new_instance_name}' via API." );
     $api_client = new Evolution_API_Client();
-    $options = ['qrcode' => true]; // Pedir QR al crear
+    $options = [
+        'qrcode' => true,          // Pedir QR al crear (existente)
+        'always_online' => true,    // Nuevo: Mantener siempre en línea
+        'sync_full_history' => true  // Nuevo: Sincronizar historial completo
+    ];
     $result = $api_client->create_instance( $new_instance_name, $options );
 
     // Procesar resultado de la API
@@ -228,46 +232,91 @@ function pos_evolution_ajax_get_qr() {
 }
 add_action( 'wp_ajax_pos_evolution_get_qr', 'pos_evolution_ajax_get_qr' );
 
-
 /**
  * Manejador AJAX: Obtener Estado y Detalles.
  * Usa la instancia definida en 'managed_instance_name'.
  * Llama al método get_instance_details que usa /fetchInstances.
- * **CORREGIDO para determinar el estado basado en la presencia de detalles.**
+ * **MODIFICADO: Si la instancia no se encuentra (error 'instance_not_found'),
+ * limpia la configuración local y devuelve un estado 'DELETED_LOCALLY'.**
  */
 function pos_evolution_ajax_get_status() {
     // Log: Inicio de la función y datos recibidos
-    // error_log( "[EVO_API_AJAX_GET_STATUS] Received request. POST data: " . print_r($_POST, true) );
+    error_log( "[EVO_API_AJAX_GET_STATUS] Received request. POST data: " . print_r($_POST, true) );
 
     // Verificar seguridad, permisos y configuración
-    $verification_result = _pos_evolution_api_ajax_verify_request();
+    $verification_result = _pos_evolution_api_ajax_verify_request(); // Función auxiliar en este mismo archivo
     if ( is_wp_error( $verification_result ) ) {
-        // error_log( "[EVO_API_AJAX_GET_STATUS] Verification failed: " . $verification_result->get_error_message() );
+        error_log( "[EVO_API_AJAX_GET_STATUS] Verification failed: " . $verification_result->get_error_message() );
         wp_send_json_error( $verification_result->get_error_message(), $verification_result->get_error_data()['status'] ?? 400 );
     }
     $instance_name = $verification_result; // Nombre de la instancia gestionada
 
+    // --- INICIO MODIFICACIÓN: Manejar si no hay instancia en WP ---
     if ( empty( $instance_name ) ) {
-        $error_msg = __( 'No hay ninguna instancia gestionada configurada para consultar el estado.', 'pos-base' );
-        // error_log( "[EVO_API_AJAX_GET_STATUS] Not Found: No managed instance name set." );
-        wp_send_json_error( $error_msg, 404 );
+        // Si no hay nombre de instancia guardado en WP, no hay nada que consultar ni limpiar.
+        // Enviar un estado que indique que no hay nada configurado para que JS reinicie la UI.
+        $response_data = [
+            'message' => __( 'No hay ninguna instancia gestionada configurada en este plugin.', 'pos-base' ),
+            'state'   => 'NOT_CONFIGURED', // Estado para indicar que no hay instancia en WP
+            'instance_name' => '',
+            'details' => null
+        ];
+        // error_log( "[EVO_API_AJAX_GET_STATUS] No managed instance name set in WP options. Sending 'NOT_CONFIGURED' state." );
+        wp_send_json_success( $response_data ); // Enviar éxito para que JS actualice la UI
+        return; // Salir de la función
     }
+    // --- FIN MODIFICACIÓN ---
 
     // Log: Intentando llamar a la API usando el nuevo método
     // error_log( "[EVO_API_AJAX_GET_STATUS] Attempting to get DETAILS for instance '{$instance_name}' via API (using get_instance_details -> fetchInstances)." );
-    $api_client = new Evolution_API_Client();
+    $api_client = new Evolution_API_Client(); // Clase de api-client.php
     // *** LLAMAR AL NUEVO MÉTODO get_instance_details ***
     $instance_details = $api_client->get_instance_details( $instance_name );
 
     // Procesar resultado
     if ( is_wp_error( $instance_details ) ) {
-        // Si get_instance_details devuelve un error (ej: no encontrada en fetchInstances)
-        $error_message = $instance_details->get_error_message();
-        $status_code = $instance_details->get_error_data()['status'] ?? 500;
-        // error_log( "[EVO_API_AJAX_GET_STATUS] API Error getting details for '{$instance_name}': [{$status_code}] {$error_message}" );
-        wp_send_json_error( $error_message, $status_code );
+        // --- INICIO DE LA MODIFICACIÓN: Detectar 'instance_not_found' ---
+        // Verificar si el error específico es 'instance_not_found' (definido en api-client.php)
+        if ( $instance_details->get_error_code() === 'instance_not_found' ) {
+            // La instancia NO existe en el servidor Evolution API.
+            error_log( "[EVO_API_AJAX_GET_STATUS] Instance '{$instance_name}' not found on API server (error code 'instance_not_found'). Cleaning up local WP settings." );
+
+            // 1. Obtener los ajustes actuales
+            $settings = pos_evolution_api_get_settings(); // Función de settings.php
+
+            // 2. Limpiar el nombre de la instancia gestionada
+            $settings['managed_instance_name'] = '';
+
+            // 3. Guardar los ajustes actualizados en WordPress
+            //    Usamos update_option directamente aquí. La sanitización se aplica automáticamente
+            //    si 'pos_evolution_api_settings' fue registrado con sanitize_callback.
+            $update_result = update_option( 'pos_evolution_api_settings', $settings );
+            error_log( "[EVO_API_AJAX_GET_STATUS] Cleared 'managed_instance_name' in WP option 'pos_evolution_api_settings'. Update result: " . ($update_result ? 'Success' : 'Failed/No Change') );
+
+            // 4. Preparar la respuesta JSON de éxito con estado especial
+            $response_data = [
+                'message' => __( 'La instancia no fue encontrada en el servidor Evolution y la configuración local ha sido eliminada.', 'pos-base' ),
+                'state'   => 'DELETED_LOCALLY', // Estado especial para que JS reinicie la UI
+                'instance_name' => '', // Indicar que ya no hay instancia gestionada
+                'details' => null // No hay detalles que mostrar
+            ];
+
+            // 5. Enviar la respuesta de éxito al frontend
+            error_log( "[EVO_API_AJAX_GET_STATUS] Sending success JSON response with 'DELETED_LOCALLY' state: " . print_r($response_data, true) );
+            wp_send_json_success( $response_data );
+
+        } else {
+            // Es OTRO tipo de error de la API (conexión, autenticación, etc.)
+            $error_message = $instance_details->get_error_message();
+            $status_code = $instance_details->get_error_data()['status'] ?? 500;
+            error_log( "[EVO_API_AJAX_GET_STATUS] API Error (not 'instance_not_found') getting details for '{$instance_name}': [{$status_code}] {$error_message}" );
+            wp_send_json_error( $error_message, $status_code );
+        }
+        // --- FIN DE LA MODIFICACIÓN ---
+
     } else {
         // Éxito, $instance_details contiene el objeto 'instance' encontrado por get_instance_details
+        // (El código aquí permanece igual que antes para el caso de éxito normal)
         // error_log( "[EVO_API_AJAX_GET_STATUS] API Success getting details for '{$instance_name}'. Details from fetchInstances: " . print_r($instance_details, true) );
 
         // *** LÓGICA DE ESTADO CORREGIDA ***
@@ -277,14 +326,14 @@ function pos_evolution_ajax_get_status() {
         // independientemente de lo que diga la clave 'status' o 'state' de este endpoint.
         if ( ! empty( $instance_details['owner'] ) ) {
             $state = 'CONNECTED';
-            // error_log("[EVO_API_AJAX_GET_STATUS] Determined state as CONNECTED based on non-empty 'owner'.");
+            error_log("[EVO_API_AJAX_GET_STATUS] Determined state as CONNECTED based on non-empty 'owner'.");
         } elseif ( ! empty( $instance_details['wid'] ) ) { // Fallback por si 'owner' no siempre está
              $state = 'CONNECTED';
-            //  error_log("[EVO_API_AJAX_GET_STATUS] Determined state as CONNECTED based on non-empty 'wid'.");
+             error_log("[EVO_API_AJAX_GET_STATUS] Determined state as CONNECTED based on non-empty 'wid'.");
         } else {
             // Si no hay owner ni wid, entonces sí usamos 'state' o 'status' como fallback.
             $state = $instance_details['state'] ?? $instance_details['status'] ?? 'unknown';
-            // error_log("[EVO_API_AJAX_GET_STATUS] Determined state as '{$state}' from 'state'/'status' key (owner/wid missing or empty).");
+            error_log("[EVO_API_AJAX_GET_STATUS] Determined state as '{$state}' from 'state'/'status' key (owner/wid missing or empty).");
         }
         // *** FIN LÓGICA DE ESTADO CORREGIDA ***
 
@@ -302,7 +351,7 @@ function pos_evolution_ajax_get_status() {
         ];
 
         // Log: Enviando respuesta JSON exitosa
-        // error_log( "[EVO_API_AJAX_GET_STATUS] Sending success JSON response with data wrapper: " . print_r($response_inner_data, true) );
+        error_log( "[EVO_API_AJAX_GET_STATUS] Sending success JSON response with current state '{$state}': " . print_r($response_inner_data, true) );
         wp_send_json_success( $response_inner_data );
     }
 }

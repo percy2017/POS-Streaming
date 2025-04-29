@@ -17,10 +17,13 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         return;
     }
-    // --- Desestructurar datos para fácil acceso ---
-    const { ajaxurl, nonce, instanceName, i18n } = evolutionApiData;
+
+    const { ajaxurl, nonce, i18n } = evolutionApiData; // Obtiene las constantes
+    let instanceName = evolutionApiData.instanceName;   // Obtiene instanceName con let
 
     // --- Elementos del DOM ---
+    const createInstanceSection = document.getElementById('create-instance-section'); // <-- AÑADIR
+    const manageInstanceSection = document.getElementById('manage-instance-section'); // <-- AÑADIR
     const createButton = document.getElementById('create-instance-button');
     const getQrButton = document.getElementById('get-qr-button');
     const getStatusButton = document.getElementById('get-status-button');
@@ -43,10 +46,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // --- Deshabilitar botón Eliminar por defecto ---
     if (deleteButton) {
-        deleteButton.disabled = true;
+        deleteButton.disabled = true //true;
         deleteButton.title = i18n.statusLoading || 'Cargando estado...'; // Título inicial
     }
 
+ 
+    
     // --- Variables de Estado y Configuración ---
     let isRefreshingStatus = false; // Flag para evitar solapamiento de refrescos
     const refreshInterval = 30000; // Intervalo en milisegundos (30 segundos)
@@ -79,9 +84,76 @@ document.addEventListener('DOMContentLoaded', function() {
         statusMessageArea.innerHTML = `<div class="notice notice-${type} is-dismissible" style="margin: 0;"><p>${message}</p></div>`;
     }
 
+
+    /**
+     * Inicia o reinicia el temporizador para refrescar automáticamente el estado de la instancia.
+     * Limpia cualquier temporizador anterior.
+     * Solo inicia si el intervalo es > 0 y hay un nombre de instancia gestionada.
+     */
+    function startStatusRefresh() {
+        // Limpiar cualquier timer existente para evitar duplicados
+        if (refreshTimerId) {
+            clearInterval(refreshTimerId);
+            refreshTimerId = null;
+            // console.log('[EVO_API_JS] Cleared existing auto-refresh timer.');
+        }
+
+        // Obtener intervalo desde los datos localizados (o usar el valor por defecto si no está)
+        const interval = evolutionApiData.refreshInterval || 0; // Usar 0 si no está definido
+
+        // Solo iniciar si el intervalo es válido (> 0) y tenemos un nombre de instancia
+        if (interval > 0 && instanceName) {
+            console.log(`[EVO_API_JS] Starting auto-refresh timer with interval: ${interval}ms for instance: ${instanceName}`);
+            logActivity(`Auto-refresco iniciado (cada ${interval / 1000}s).`, 'SYSTEM');
+
+            // Configurar el nuevo intervalo
+            refreshTimerId = setInterval(() => {
+                // Verificar si ya hay una petición de estado en curso
+                if (!isRefreshingStatus) {
+                    console.log('[EVO_API_JS] Auto-refresh triggered: Getting status...');
+                    logActivity(i18n.autoRefreshing || 'Actualizando estado automáticamente...', 'SYSTEM');
+                    // Llamar a performAjaxAction para obtener el estado
+                    // Pasar getStatusButton para que muestre el spinner si existe
+                    performAjaxAction('pos_evolution_get_status', {}, getStatusButton);
+                } else {
+                    // Si ya hay una petición en curso, saltar este ciclo
+                    console.log('[EVO_API_JS] Auto-refresh skipped: Previous refresh still in progress.');
+                }
+            }, interval); // Usar el intervalo configurado
+
+        } else {
+            // Si el intervalo es 0 o no hay nombre de instancia, asegurarse de que no haya timer activo
+            console.log(`[EVO_API_JS] Auto-refresh disabled (Interval: ${interval}ms, InstanceName: '${instanceName}').`);
+            if (refreshTimerId) { // Doble verificación por si acaso
+                    clearInterval(refreshTimerId);
+                    refreshTimerId = null;
+            }
+        }
+    }
+    
     // Actualizar los detalles específicos de la instancia (Estado, Nombre, Owner, Foto) y el botón Eliminar
+    // MODIFICADO: También muestra la sección de gestión y oculta la de creación.
     function updateInstanceDetails(state = '-', pushname = '-', owner = '-', profilePicUrl = null) {
         console.log(`[EVO_API_JS] --- updateInstanceDetails START - State: ${state}, Pushname: ${pushname}, Owner: ${owner}, PicURL: ${profilePicUrl ? 'Yes' : 'No'}`);
+
+        // *** INICIO MODIFICACIÓN: Mostrar/Ocultar Secciones ***
+        if (manageInstanceSection) {
+            manageInstanceSection.style.display = 'block'; // Mostrar sección de gestión
+            console.log('[EVO_API_JS] updateInstanceDetails: Showing manageInstanceSection.');
+        } else {
+             console.warn('[EVO_API_JS] updateInstanceDetails: manageInstanceSection not found!');
+        }
+        if (createInstanceSection) {
+            createInstanceSection.style.display = 'none'; // Ocultar sección de creación
+            console.log('[EVO_API_JS] updateInstanceDetails: Hiding createInstanceSection.');
+        } else {
+             console.warn('[EVO_API_JS] updateInstanceDetails: createInstanceSection not found!');
+        }
+        // Ocultar mensaje "No hay instancia" y mostrar contenedor de estado si no está visible
+        const noInstanceMsg = document.getElementById('no-instance-message');
+        if (noInstanceMsg) noInstanceMsg.style.display = 'none';
+        if (statusContainer) statusContainer.style.display = 'block';
+        // *** FIN MODIFICACIÓN ***
 
         const upperCaseState = state.toUpperCase(); // Convertir a mayúsculas para comparación
 
@@ -94,14 +166,15 @@ document.addEventListener('DOMContentLoaded', function() {
         if (profilePicImg) {
             if (profilePicUrl) {
                 profilePicImg.src = profilePicUrl;
-                profilePicImg.style.display = 'block';
+                profilePicImg.style.display = 'block'; // Asegurarse de que sea visible si hay URL
             } else {
                 profilePicImg.src = '#';
-                profilePicImg.style.display = 'none';
+                profilePicImg.style.display = 'none'; // Ocultar si no hay URL
             }
         }
 
         // --- Habilitar/Deshabilitar Botón Eliminar ---
+        // (Esta lógica permanece igual)
         if (deleteButton) {
             // Deshabilitar si el estado es CONNECTED (o cualquier otro estado "activo" que consideres, como 'open')
             if (upperCaseState === 'CONNECTED' || upperCaseState === 'OPEN') {
@@ -128,23 +201,67 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('[EVO_API_JS] --- updateInstanceDetails END ---');
     }
 
+
     // Mostrar el código QR
+    // MODIFICADO: Detiene el auto-refresco al mostrarse.
     function displayQrCode(base64Qr) {
-        if (!qrContainer || !qrSection || !qrLoadingMessage) {
-             console.error('[EVO_API_JS] displayQrCode: Missing required DOM elements.');
-             return;
+        // *** INICIO MODIFICACIÓN: Detener auto-refresco ***
+        if (refreshTimerId) {
+            clearInterval(refreshTimerId);
+            refreshTimerId = null;
+            console.log('[EVO_API_JS] Auto-refresh timer stopped by displayQrCode.');
+            logActivity('Auto-refresco detenido (mostrando QR).', 'SYSTEM');
         }
-        if (qrLoadingMessage) qrLoadingMessage.style.display = 'none'; // Ocultar 'Generando...'
+        // *** FIN MODIFICACIÓN ***
+
+        console.log('[EVO_API_JS] displayQrCode called.');
+        logActivity('Mostrando código QR...', 'ACTION');
+
+        // Verificar que los elementos necesarios existen
+        if (!qrContainer || !qrSection || !qrLoadingMessage) {
+             console.error('[EVO_API_JS] displayQrCode: Missing required DOM elements (qrContainer, qrSection, or qrLoadingMessage).');
+             displayStatusMessage('Error interno: No se encontraron los elementos para mostrar el QR.', 'error');
+             return; // Salir si faltan elementos
+        }
+
+        // Verificar si se proporcionaron datos para el QR
+        if (!base64Qr) {
+            console.warn('[EVO_API_JS] displayQrCode: No base64Qr data provided.');
+            displayStatusMessage(i18n.errorNoQr || 'No se pudo obtener el código QR.', 'warning');
+            // Ocultar sección QR si no hay datos
+            if (qrSection) qrSection.style.display = 'none';
+            // Reiniciar timer si no se muestra QR
+            startStatusRefresh();
+            return; // Salir si no hay datos
+        }
+
+        // Ocultar mensaje 'Generando...'
+        if (qrLoadingMessage) qrLoadingMessage.style.display = 'none';
+
+        // Limpiar contenedor antes de añadir nueva imagen
         qrContainer.innerHTML = '';
+
+        // Crear elemento imagen
         const img = document.createElement('img');
-        img.src = base64Qr;
+        img.id = 'qr-code-image'; // Añadir ID si se necesita referenciar
+        img.src = base64Qr; // Asignar datos base64
         img.alt = i18n.qrAltText || 'Código QR de WhatsApp';
-        img.style.maxWidth = '300px'; img.style.height = 'auto'; img.style.display = 'block'; img.style.margin = '0 auto';
+        // Aplicar estilos básicos para asegurar visibilidad y tamaño razonable
+        img.style.maxWidth = '300px';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        img.style.margin = '0 auto'; // Centrar imagen
+
+        // Añadir imagen al contenedor
         qrContainer.appendChild(img);
+
+        // Mostrar toda la sección del QR
         qrSection.style.display = 'block';
+
         console.log('[EVO_API_JS] QR Code image appended and section displayed.');
         console.log('[EVO_API_JS] --- displayQrCode function END ---');
     }
+
 
     // Ocultar el código QR
     function hideQrCode() {
@@ -163,6 +280,8 @@ document.addEventListener('DOMContentLoaded', function() {
             qrContainer.appendChild(p);
             p.style.display = 'block'; // Asegurar que sea visible
         }
+
+        startStatusRefresh();
         console.log('[EVO_API_JS] QR Code section hidden and container reset.');
         console.log('[EVO_API_JS] --- hideQrCode function END ---');
     }
@@ -198,122 +317,304 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- Manejador AJAX Genérico ---
-    function performAjaxAction(action, data = {}, button = null) {
-        logActivity(`Iniciando acción: ${action}`, 'ACTION'); // Log de actividad
-        console.log(`[EVO_API_JS] performAjaxAction called. Action: ${action}, Button: ${button ? button.id : 'N/A'}, Data:`, data);
-        showLoading(button);
+    // --- Nueva Función: Reiniciar la Interfaz de Usuario ---
+    // Muestra la sección de creación y oculta la de gestión.
+    function resetInstanceManagerUI(message = '', messageType = 'info') {
+        console.log('[EVO_API_JS] --- resetInstanceManagerUI START --- Message:', message);
+        logActivity('Reiniciando interfaz de gestión...', 'SYSTEM');
 
-        // Marcar si es refresco de estado
-        if (action === 'pos_evolution_get_status') isRefreshingStatus = true;
+        // 1. Ocultar detalles y contenedor de estado
+        if (instanceDetailsDiv) instanceDetailsDiv.style.display = 'none';
+        if (statusContainer) statusContainer.style.display = 'block'; // Asegurar que el contenedor general sea visible
+        if (statusLoadingMessage) statusLoadingMessage.style.display = 'none'; // Ocultar carga
+        const noInstanceMsg = document.getElementById('no-instance-message'); // Mensaje "No hay instancia"
+        if (noInstanceMsg) noInstanceMsg.style.display = 'block'; // Mostrar mensaje de "no hay instancia"
 
-        // Ocultar QR excepto si se está pidiendo
-        if (action !== 'pos_evolution_get_qr') {
-            hideQrCode();
-        } else {
-            console.log('[EVO_API_JS] Action is get_qr, skipping initial hideQrCode.');
-             if (qrContainer && qrLoadingMessage) {
-                 qrContainer.innerHTML = ''; qrContainer.appendChild(qrLoadingMessage);
-                 qrLoadingMessage.style.display = 'block'; qrSection.style.display = 'block';
-             }
+        // 2. Limpiar/resetear spans de detalles (opcional, ya que estarán ocultos)
+        if (stateSpan) stateSpan.textContent = '-';
+        if (pushnameSpan) pushnameSpan.textContent = '-';
+        if (ownerSpan) ownerSpan.textContent = '-';
+        if (profilePicImg) {
+            profilePicImg.src = '#';
+            profilePicImg.style.display = 'none';
         }
 
-        const formData = new URLSearchParams({ action: action, _ajax_nonce: nonce, instance_name: instanceName, ...data });
-        console.log('[EVO_API_JS] Sending AJAX request. FormData:', formData.toString());
+        // 3. *** MODIFICADO: Ocultar la sección de gestión completa ***
+        if (manageInstanceSection) {
+            manageInstanceSection.style.display = 'none';
+            console.log('[EVO_API_JS] resetInstanceManagerUI: Hiding manageInstanceSection.');
+        } else {
+            console.warn('[EVO_API_JS] resetInstanceManagerUI: manageInstanceSection not found!');
+        }
 
-        return fetch(ajaxurl, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: formData })
-        .then(response => {
-            console.log('[EVO_API_JS] Received AJAX response (raw):', response);
-             if (!response.ok) {
-                 return response.text().then(text => {
-                     console.error(`[EVO_API_JS] AJAX response not OK. Status: ${response.status}, Body: ${text}`);
-                     try {
-                         const errorData = JSON.parse(text);
-                         throw new Error(errorData.data || response.statusText || 'Unknown error');
-                     } catch (e) {
-                         throw new Error(text || response.statusText || 'Unknown error');
-                     }
-                 });
-             }
-            return response.json().catch(error => {
-                console.error('[EVO_API_JS] Failed to parse JSON response even though status was OK:', error);
-                throw new Error('Invalid JSON response from server.');
-            });
-        })
-        .then(result => {
-            console.log('[EVO_API_JS] Parsed AJAX response JSON:', result);
-            hideLoading(button);
-            // Siempre desmarcar refresco al completar la llamada de estado
-            if (action === 'pos_evolution_get_status') isRefreshingStatus = false;
+        // 4. Ocultar sección QR
+        hideQrCode(); // Usar la función existente
 
-            if (result.success) {
-                logActivity(result.data.message || 'Acción completada', 'SUCCESS'); // Log de actividad
-                console.log('[EVO_API_JS] AJAX call successful (result.success is true).');
-                console.log('[EVO_API_JS] Checking result.data:', result.data);
-                const qrData = result.data ? result.data.qr_base64 : undefined;
-                console.log('[EVO_API_JS] Value of result.data.qr_base64 BEFORE check:', qrData);
+        // 5. *** MODIFICADO: Mostrar la sección de creación completa ***
+        if (createInstanceSection) {
+            createInstanceSection.style.display = 'block'; // O 'inline-block' si prefieres
+            console.log('[EVO_API_JS] resetInstanceManagerUI: Showing createInstanceSection.');
+        } else {
+            console.warn('[EVO_API_JS] resetInstanceManagerUI: createInstanceSection not found!');
+        }
 
-                if (qrData) { // Mostrar QR si existe
-                    console.log('[EVO_API_JS] >>> ENTERED IF block (QR data is truthy).');
-                    displayQrCode(qrData);
-                    displayStatusMessage(result.data.message || i18n.qrObtained || 'Código QR obtenido.', 'success');
-                } else { // Si no hay QR
-                    console.log('[EVO_API_JS] >>> ENTERED ELSE block (QR data is falsy or missing).');
-                    // Mostrar mensaje general (puede ser de error o informativo)
-                    displayStatusMessage(result.data.message || i18n.errorNoQr || 'No se pudo obtener el código QR...', 'warning');
+        // 6. Mostrar mensaje recibido (si lo hay)
+        if (message) {
+            displayStatusMessage(message, messageType);
+        } else {
+            // Limpiar área de mensajes si no hay uno específico
+            if (statusMessageArea) statusMessageArea.innerHTML = '';
+            // Mostrar mensaje por defecto de "no hay instancia" si no viene uno específico
+            if (noInstanceMsg) noInstanceMsg.style.display = 'block';
+        }
 
-                    // Si la acción era obtener QR y falló (no vino QR), intentar obtener estado para dar contexto
-                    // PERO solo si el estado NO es ya 'CONNECTED' (no tiene sentido pedir QR si ya está conectado)
-                    if (action === 'pos_evolution_get_qr' && getStatusButton && (!result.data || result.data.state !== 'CONNECTED')) {
-                        console.log('[EVO_API_JS] QR request did not return QR, attempting to get status for context.');
-                        setTimeout(() => performAjaxAction('pos_evolution_get_status', {}, getStatusButton), 500);
-                    }
-                }
+        // 7. Detener auto-refresco
+        if (refreshTimerId) {
+            clearInterval(refreshTimerId);
+            refreshTimerId = null;
+            console.log('[EVO_API_JS] Auto-refresh timer stopped.');
+            logActivity('Auto-refresco detenido.', 'SYSTEM');
+        }
 
-                // Actualizar detalles si es respuesta de get_status
-                if (result.data && result.data.state && action === 'pos_evolution_get_status') {
-                    console.log('[EVO_API_JS] State data found in get_status response, calling updateInstanceDetails.');
-                    const details = result.data.details || {};
-                    const instanceDetails = details.instance || {}; // <-- Objeto con wid, pushname, owner, etc.
-                    updateInstanceDetails(
-                        result.data.state, // <-- Estado corregido por PHP
-                        // instanceDetails.owner,
-                        instanceDetails.profileName, // <-- Usar profileName según tu JSON
-                        instanceDetails.owner, // <-- Pasar el owner
-                        instanceDetails.profilePictureUrl
-                    );
-                    // Mostrar mensaje específico de estado actualizado en el área general
-                     displayStatusMessage(i18n.statusRefreshed || 'Estado actualizado.', 'info');
-                }
+        // 8. Limpiar log (opcional)
+        // logEntries = [];
+        // if (logListElement) logListElement.innerHTML = `<li class="log-entry-placeholder">${i18n.logCleared || 'Log limpiado.'}</li>`;
 
-                // Recarga comentada
-                if (action === 'pos_evolution_create_instance' || action === 'pos_evolution_delete_instance') {
-                    console.warn('[EVO_API_JS] Page reload after create/delete is currently commented out for debugging.');
-                    // Swal.fire({...}).then(() => { window.location.reload(); });
-                }
+        // 9. Actualizar variable global (si es necesario)
+        // evolutionApiData.instanceName = ''; // Cuidado con esto
 
-            } else { // result.success es false
-                const errorMessage = result.data || i18n.errorUnknown || 'Ocurrió un error desconocido.';
-                logActivity(errorMessage, 'ERROR'); // Log de actividad
-                console.error('[EVO_API_JS] AJAX call failed (result.success is false). Error data:', result.data);
-                displayStatusMessage(errorMessage, 'error');
-                Swal.fire({ icon: 'error', title: i18n.errorTitle || 'Error', text: errorMessage });
-            }
-            return result;
-        })
-        .catch(error => {
-            const errorMsgString = (error && error.message) ? String(error.message) : 'Unknown fetch error';
-            logActivity(`Error de red/servidor: ${errorMsgString}`, 'ERROR'); // Log de actividad
-            console.error('[EVO_API_JS] AJAX fetch failed (Network error or exception):', error);
-            hideLoading(button);
-            // Asegurarse de desmarcar refresco incluso si hay error
-            if (action === 'pos_evolution_get_status') isRefreshingStatus = false;
-            const errorMessage = `${i18n.errorNetwork || 'Error de red o de servidor:'} ${errorMsgString}`;
-            displayStatusMessage(errorMessage, 'error');
-            Swal.fire({ icon: 'error', title: i18n.errorConnection || 'Error de Conexión', text: errorMessage });
-            return { success: false, data: errorMessage };
-        });
+        console.log('[EVO_API_JS] --- resetInstanceManagerUI END ---');
     }
+  
+       // --- Manejador AJAX Genérico ---
+       function performAjaxAction(action, data = {}, button = null) {
+           logActivity(`Iniciando acción: ${action}`, 'ACTION'); // Log de actividad
+           console.log(`[EVO_API_JS] performAjaxAction called. Action: ${action}, Button: ${button ? button.id : 'N/A'}, Data:`, data);
+           showLoading(button);
+   
+           // Marcar si es refresco de estado
+           if (action === 'pos_evolution_get_status') isRefreshingStatus = true;
+   
+           // Ocultar QR excepto si se está pidiendo
+           // Si la acción es 'get_qr', mostrar el mensaje de carga del QR
+           if (action !== 'pos_evolution_get_qr') {
+               hideQrCode(); // Esto ahora reinicia el timer
+           } else {
+               console.log('[EVO_API_JS] Action is get_qr, skipping initial hideQrCode. Showing QR loading message.');
+                if (qrContainer && qrLoadingMessage && qrSection) { // Asegurarse que qrSection existe
+                    qrContainer.innerHTML = ''; // Limpiar contenedor
+                    qrContainer.appendChild(qrLoadingMessage); // Añadir mensaje de carga
+                    qrLoadingMessage.style.display = 'block'; // Mostrar mensaje de carga
+                    qrSection.style.display = 'block'; // Mostrar la sección QR
+                }
+           }
+   
+           // Preparar datos para la petición AJAX
+           const formData = new URLSearchParams({
+               action: action,
+               _ajax_nonce: nonce, // Usar el nonce localizado
+               instance_name: instanceName, // Usar el nombre de instancia global JS
+               ...data // Añadir datos específicos de la acción (ej: instance_name_to_create)
+           });
+           console.log('[EVO_API_JS] Sending AJAX request. FormData:', formData.toString());
+   
+           // Realizar la petición AJAX usando Fetch API
+           return fetch(ajaxurl, { // ajaxurl es localizado por WP
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/x-www-form-urlencoded'
+               },
+               body: formData
+           })
+           .then(response => {
+               // Manejar respuestas no exitosas (ej: 404, 500)
+               console.log('[EVO_API_JS] Received AJAX response (raw):', response);
+                if (!response.ok) {
+                    // Intentar obtener texto del cuerpo para más detalles
+                    return response.text().then(text => {
+                        console.error(`[EVO_API_JS] AJAX response not OK. Status: ${response.status}, Body: ${text}`);
+                        try {
+                            // Intentar parsear como JSON si el servidor envía errores estructurados
+                            const errorData = JSON.parse(text);
+                            throw new Error(errorData.data || response.statusText || 'Unknown server error');
+                        } catch (e) {
+                            // Si no es JSON o falla el parseo, usar el texto plano o el estado HTTP
+                            throw new Error(text || response.statusText || 'Unknown server error');
+                        }
+                    });
+                }
+               // Intentar parsear la respuesta como JSON si fue exitosa (2xx)
+               return response.json().catch(error => {
+                   console.error('[EVO_API_JS] Failed to parse JSON response even though status was OK:', error);
+                   // Si falla el parseo, lanzar un error indicando respuesta inválida
+                   throw new Error('Invalid JSON response from server.');
+               });
+           })
+           .then(result => {
+               // Procesar la respuesta JSON parseada
+               console.log('[EVO_API_JS] Parsed AJAX response JSON:', result);
+               hideLoading(button); // Ocultar spinner del botón
+               // Siempre desmarcar refresco al completar la llamada de estado
+               if (action === 'pos_evolution_get_status') isRefreshingStatus = false;
+   
+               if (result.success) {
+                   // --- ÉXITO ---
+                   // Log de actividad con el mensaje del backend
+                   logActivity(result.data.message || 'Acción completada', 'SUCCESS');
+                   console.log('[EVO_API_JS] AJAX call successful (result.success is true).');
+                   console.log('[EVO_API_JS] Checking result.data:', result.data);
+   
+                   // --- INICIO LÓGICA DE REINICIO ---
+                   // Verificar si el estado indica que la configuración local fue eliminada o no existe
+                   if (result.data && (result.data.state === 'DELETED_LOCALLY' || result.data.state === 'NOT_CONFIGURED')) {
+                       console.log(`[EVO_API_JS] Received state '${result.data.state}'. Resetting UI.`);
+                       // Llamar a la función de reinicio con el mensaje de PHP
+                       resetInstanceManagerUI(result.data.message || 'Configuración reiniciada.', 'warning');
+                       // Detener el procesamiento adicional para esta respuesta exitosa
+                       return result; // Salir del .then para esta respuesta específica
+                   }
+                   // --- FIN LÓGICA DE REINICIO ---
+   
+   
+                   // --- Lógica para otras respuestas exitosas (si no se reinició la UI) ---
+                   const qrData = result.data ? result.data.qr_base64 : undefined;
+                   console.log('[EVO_API_JS] Value of result.data.qr_base64 BEFORE check:', qrData);
+   
+                   // Mostrar QR si la respuesta lo contiene (puede ser de 'create' o 'get_qr')
+                   if (qrData) {
+                       console.log('[EVO_API_JS] >>> ENTERED IF block (QR data is truthy).');
+                       displayQrCode(qrData); // Esta función ahora detiene el timer
+                       // Mostrar mensaje de QR obtenido, solo si no es un estado de reinicio
+                       if (!result.data || (result.data.state !== 'DELETED_LOCALLY' && result.data.state !== 'NOT_CONFIGURED')) {
+                            displayStatusMessage(result.data.message || i18n.qrObtained || 'Código QR obtenido.', 'success');
+                       }
+                   } else { // Si no hay QR en la respuesta
+                       console.log('[EVO_API_JS] >>> ENTERED ELSE block (QR data is falsy or missing).');
+                       // Mostrar mensaje general (puede ser de error o informativo), solo si no es reinicio
+                       if (!result.data || (result.data.state !== 'DELETED_LOCALLY' && result.data.state !== 'NOT_CONFIGURED')) {
+                            displayStatusMessage(result.data.message || i18n.errorNoQr || 'No se pudo obtener el código QR...', 'warning');
+                       }
+   
+                       // Si la acción era obtener QR y falló (no vino QR), intentar obtener estado para dar contexto
+                       // PERO solo si el estado NO es ya 'CONNECTED' y si la UI NO fue reiniciada
+                       if (action === 'pos_evolution_get_qr' && getStatusButton && (!result.data || (result.data.state !== 'CONNECTED' && result.data.state !== 'DELETED_LOCALLY' && result.data.state !== 'NOT_CONFIGURED'))) {
+                           console.log('[EVO_API_JS] QR request did not return QR, attempting to get status for context.');
+                           // Reiniciar timer aquí porque hideQrCode no se llamó
+                           startStatusRefresh();
+                           // Pedir estado después de un breve delay
+                           setTimeout(() => performAjaxAction('pos_evolution_get_status', {}, getStatusButton), 500);
+                       } else if (action !== 'pos_evolution_create_instance') {
+                           // Si no hubo QR y no fue una creación, reiniciar el timer (hideQrCode lo hace, pero por si acaso)
+                           startStatusRefresh();
+                       }
+                   }
+   
+                   // Actualizar detalles si es respuesta de get_status Y NO es un estado de reinicio
+                   if (result.data && result.data.state && action === 'pos_evolution_get_status' && result.data.state !== 'DELETED_LOCALLY' && result.data.state !== 'NOT_CONFIGURED') {
+                       console.log('[EVO_API_JS] State data found in get_status response, calling updateInstanceDetails.');
+                       const details = result.data.details || {};
+                       const instanceDetails = details.instance || {};
+                       updateInstanceDetails(
+                           result.data.state,
+                           instanceDetails.profileName,
+                           instanceDetails.owner,
+                           instanceDetails.profilePictureUrl
+                       );
+                       // Mostrar mensaje específico de estado actualizado en el área general
+                        displayStatusMessage(i18n.statusRefreshed || 'Estado actualizado.', 'info');
+                        // Reiniciar timer después de actualizar estado
+                        startStatusRefresh();
+                   }
+   
+                   // --- INICIO MODIFICACIÓN: Manejo post-creación (SIN RECARGA) ---
+                   if (action === 'pos_evolution_create_instance') {
+                        console.log('[EVO_API_JS] Instance created. Showing success message.');
+                        // Guardar el QR y nombre de instancia de la respuesta original
+                        const createdInstanceName = result.data.instance_name;
+                        const createdQrData = result.data.qr_base64; // Puede ser null si ya estaba conectada
+   
+                        Swal.fire({
+                            title: i18n.createSuccessTitle || '¡Éxito!',
+                            text: result.data.message || i18n.createSuccessText || 'Instancia creada.',
+                            icon: 'success',
+                            confirmButtonText: 'OK' // Botón para cerrar manualmente
+                        }).then(() => { // Ejecutar después de que el usuario cierre el SweetAlert
+                            console.log('[EVO_API_JS] SweetAlert closed after instance creation.');
+                            // Actualizar la UI al modo de gestión
+                            // Usar un estado temporal o el que devuelva la API si es más preciso
+                            const initialState = (result.data.details && result.data.details.instance && result.data.details.instance.state) ? result.data.details.instance.state : 'CREATED';
+                            updateInstanceDetails(initialState, '-', '-', null);
+   
+                            // Actualizar el nombre de instancia global para futuras acciones
+                            if (createdInstanceName) {
+                                instanceName = createdInstanceName; // Actualizar variable JS
+                                // Actualizar input oculto
+                                const nameInput = document.getElementById('managed-instance-name-input');
+                                if (nameInput) nameInput.value = createdInstanceName;
+                                // Actualizar display del nombre
+                                const nameDisplay = document.getElementById('managed-instance-name-display');
+                                if (nameDisplay) nameDisplay.textContent = createdInstanceName;
+   
+                                console.log(`[EVO_API_JS] Updated instanceName to: ${instanceName}`);
+                            }
+   
+                            // Volver a mostrar el QR si se recibió al crear
+                            if (createdQrData) {
+                                console.log('[EVO_API_JS] Re-displaying QR code after SweetAlert close.');
+                                displayQrCode(createdQrData); // Esta función detiene el timer
+                            } else {
+                                // Si no hubo QR (ej. ya estaba conectada), iniciar el refresco de estado normal
+                                console.log('[EVO_API_JS] No QR on creation, starting status refresh.');
+                                startStatusRefresh();
+                            }
+                        });
+                   }
+                   // --- FIN MODIFICACIÓN ---
+                   // --- INICIO MODIFICACIÓN: Manejo post-eliminación (SIN RECARGA) ---
+                   else if (action === 'pos_evolution_delete_instance') {
+                       console.log('[EVO_API_JS] Instance deleted. Showing success message.'); // <-- Actualizar log si quieres
+                       Swal.fire({
+                           title: i18n.deleteSuccessTitle || '¡Eliminada!',
+                           text: result.data.message || i18n.deleteSuccessText || 'Instancia eliminada.', // <-- Quitar "La página se recargará."
+                           icon: 'success',
+                           confirmButtonText: 'OK'
+                       }).then(() => { // <-- AÑADIR ESTE BLOQUE .then()
+                           console.log('[EVO_API_JS] SweetAlert closed after instance deletion. Resetting UI.');
+                           // Llamar a la función para reiniciar la UI dinámicamente
+                           resetInstanceManagerUI(i18n.configResetMessage || 'La configuración local ha sido reiniciada.', 'info');
+                       });
+                   }
+                   // --- FIN MODIFICACIÓN ---
+   
+               } else {
+                   // --- ERROR DEL BACKEND (result.success es false) ---
+                   const errorMessage = result.data || i18n.errorUnknown || 'Ocurrió un error desconocido.';
+                   logActivity(errorMessage, 'ERROR'); // Log de actividad
+                   console.error('[EVO_API_JS] AJAX call failed (result.success is false). Error data:', result.data);
+                   displayStatusMessage(errorMessage, 'error');
+                   Swal.fire({ icon: 'error', title: i18n.errorTitle || 'Error', text: errorMessage });
+                   // Reiniciar timer incluso si hubo error del backend
+                   startStatusRefresh();
+               }
+               return result; // Devolver el resultado para posibles cadenas .then
+           })
+           .catch(error => {
+               // --- ERROR DE RED O EXCEPCIÓN ---
+               const errorMsgString = (error && error.message) ? String(error.message) : 'Unknown fetch error';
+               logActivity(`Error de red/servidor: ${errorMsgString}`, 'ERROR'); // Log de actividad
+               console.error('[EVO_API_JS] AJAX fetch failed (Network error or exception):', error);
+               hideLoading(button); // Ocultar spinner
+               // Asegurarse de desmarcar refresco incluso si hay error
+               if (action === 'pos_evolution_get_status') isRefreshingStatus = false;
+               const errorMessage = `${i18n.errorNetwork || 'Error de red o de servidor:'} ${errorMsgString}`;
+               displayStatusMessage(errorMessage, 'error');
+               Swal.fire({ icon: 'error', title: i18n.errorConnection || 'Error de Conexión', text: errorMessage });
+               // Reiniciar timer después de error de red
+               startStatusRefresh();
+               return { success: false, data: errorMessage }; // Devolver un resultado de error estructurado
+           });
+       } // Fin de performAjaxAction
+   
 
     // --- Event Listeners ---
     console.log('[EVO_API_JS] Attaching event listeners.');
@@ -411,10 +712,10 @@ document.addEventListener('DOMContentLoaded', function() {
     if (deleteButton) {
         deleteButton.addEventListener('click', function() {
             logActivity(`Botón '${this.textContent.trim()}' presionado.`, 'UI');
-            console.log('[EVO_API_JS] Delete button clicked.');
+            // console.log('[EVO_API_JS] Delete button clicked.');
             const deleteHtml = `${i18n.deleteText1 || '¡Esta acción es irreversible! Se eliminará la instancia'} '<strong>${instanceName}</strong>' ${i18n.deleteText2 || 'del servidor Evolution API.'}<br><br>${i18n.deleteConfirmPrompt || 'Escribe el nombre de la instancia para confirmar:'}`;
             Swal.fire({
-                title: i18n.deleteTitle || '¿Eliminar Instancia Permanentemente?',
+                title: i18n.deleteTitle || '¿Eliminar Instancia?',
                 html: deleteHtml,
                 input: 'text',
                 inputPlaceholder: instanceName,

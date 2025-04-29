@@ -11,25 +11,25 @@ defined( 'ABSPATH' ) or die( '¡No tienes permiso para acceder aquí!' );
  */
 function pos_base_add_admin_menu() { 
 
-    // Menú Principal
-    add_menu_page(
-        __( 'Punto de Venta', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
-        __( 'Punto de Venta', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
+     // Menú Principal
+     add_menu_page(
+        __( 'POS Base', 'pos-base' ),          // Título de la página (Nuevo Text Domain)
+        __( 'POS Base', 'pos-base' ),          // Título del menú (Nuevo Text Domain)
         'manage_woocommerce',                   // Capacidad
-        'pos-base',                             
-        'pos_base_render_page',                 
+        'pos-base',                             // <--- NUEVO SLUG PRINCIPAL
+        'pos_base_render_page',                 // <--- FUNCIÓN RENOMBRADA
         'dashicons-store',                      // Icono
         58                                      // Posición
     );
 
     // Submenú: POS (apunta a la misma página que el menú principal)
     add_submenu_page(
-        'pos-base',                             
-        __( 'Punto de Venta', 'pos-streaming' ),// Título de la página (Mantenemos 'pos-streaming' para contenido)
-        __( 'Punto de Venta', 'pos-streaming' ),           // Título del submenú (Mantenemos 'pos-streaming')
+        'pos-base',                             // <--- SLUG PADRE ACTUALIZADO
+        __( 'Punto de Venta', 'pos-base' ),// Título de la página (Mantenemos 'pos-streaming' para contenido)
+        __( 'POS', 'pos-base' ),           // Título del submenú (Mantenemos 'pos-streaming')
         'manage_woocommerce',                   // Capacidad
-        'pos-base',                             
-        'pos_base_render_page'                  
+        'pos-base',                             // <--- MISMO SLUG que add_menu_page (Actualizado)
+        'pos_base_render_page'                  // <--- MISMA FUNCIÓN callback (Actualizado)
     );
 
     // Submenú: Configuración
