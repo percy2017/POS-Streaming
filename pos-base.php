@@ -199,6 +199,7 @@ function pos_base_enqueue_assets( $hook_suffix ) {
             'rest_url' => esc_url_raw( rest_url( 'pos-base/v1/' ) ),
             'admin_url' => admin_url(),
             'intlTelInputUtilsScript' => esc_url( POS_BASE_ASSETS_URL . 'vendor/intl-tel-input/js/utils.js' ),
+            'default_email_domain' => 'admin.com', // <-- AÑADIR ESTA LÍNEA (cambia tusitio.com por tu dominio real)
             'default_avatar_url' => get_avatar_url( 0, ['size' => 96, 'default' => 'mystery'] ),
             'i18n' => array(
                 // Usar text domain 'pos-base'

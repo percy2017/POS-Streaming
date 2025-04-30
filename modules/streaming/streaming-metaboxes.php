@@ -104,6 +104,9 @@ function streaming_account_metabox_html( $post ) { // $post no se usa para el ID
         'prime_video' => 'Amazon Prime Video',
         'spotify'     => 'Spotify',
         'youtube_premium' => 'YouTube Premium',
+        'flujo_tv' => 'Flujo Tv',
+		'mas_tv' => 'Mas Tv',
+		'gx_max' => 'Gx Max',
         'other'       => __( 'Otro', 'pos-streaming' ),
     );
 

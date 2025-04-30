@@ -92,6 +92,7 @@ jQuery(function ($) {
 
     // Checkout
     let isLoadingCheckoutAction = false; // Para evitar completar venta múltiple
+    let isEmailAutoUpdated = false; // Flag para rastrear si el email fue autocompletado
 
     // --- Constantes y Configuración ---
     const DEBOUNCE_DELAY = 500;
@@ -641,7 +642,6 @@ jQuery(function ($) {
             return;
         }
     
-        // --- INICIO CORRECCIÓN ---
         // Construir el nombre de la variación a partir de los atributos
         let variationNameSuffix = '';
         if (variationData.attributes && typeof variationData.attributes === 'object') {
@@ -664,7 +664,6 @@ jQuery(function ($) {
             type: 'variation',
             stock_status: variationData.stock_status
         };
-        // --- FIN CORRECCIÓN ---
     
         console.log("Añadiendo variación al carrito:", itemToAdd); // Log para verificar
         addToCart(itemToAdd);
@@ -676,11 +675,99 @@ jQuery(function ($) {
         else { console.error('ID inválido para eliminar:', removeButton.data('remove-id')); }
     }
 
+    /**
+     * Normaliza una cadena para usarla como parte de un email (minúsculas, sin acentos, espacios a puntos).
+     * @param {string} name La cadena a normalizar.
+     * @returns {string} La cadena normalizada.
+     */
+    function normalizeNameForEmail(name) {
+        if (!name) return '';
+        return name
+            .toString()
+            .toLowerCase()
+            .normalize('NFD') // Separa caracteres base de diacríticos
+            .replace(/[\u0300-\u036f]/g, '') // Elimina diacríticos
+            .replace(/\s+/g, '.') // Reemplaza espacios (uno o más) por un punto
+            .replace(/[^\w.-]/g, '') // Elimina caracteres no alfanuméricos excepto punto y guión bajo/medio
+            .replace(/\.+/g, '.') // Reemplaza múltiples puntos por uno solo
+            .replace(/^\.|\.$/g, ''); // Elimina puntos al inicio o final
+    }
+
+     /**
+      * Actualiza el campo de email automáticamente basado en nombre y apellido.
+      * Permite sobrescribir si el contenido actual fue autogenerado previamente.
+      */
+     function updateAutoEmail() {
+         console.log('DEBUG: updateAutoEmail triggered.');
+         const emailFieldValue = $customerEmailInput.val().trim();
+         console.log('DEBUG: Current email field value:', `"${emailFieldValue}"`, 'isEmailAutoUpdated:', isEmailAutoUpdated);
+ 
+         // Generar el email potencial SIEMPRE para comparar
+         const firstNameValue = $customerFirstNameInput.val();
+         const lastNameValue = $customerLastNameInput.val();
+         const firstName = normalizeNameForEmail(firstNameValue);
+         const lastName = normalizeNameForEmail(lastNameValue);
+         let potentialAutoEmail = '';
+         if (firstName && lastName) {
+             potentialAutoEmail = `${firstName}.${lastName}`;
+         } else if (firstName) {
+             potentialAutoEmail = firstName;
+         } else if (lastName) {
+             potentialAutoEmail = lastName;
+         }
+         console.log('DEBUG: Potential autoEmail:', `"${potentialAutoEmail}"`);
+ 
+         // Añadir dominio por defecto si existe y se generó un nombre
+         if (potentialAutoEmail && posBaseParams.default_email_domain) {
+             potentialAutoEmail += '@' + posBaseParams.default_email_domain;
+             console.log('DEBUG: Appended default domain. Email is now:', `"${potentialAutoEmail}"`);
+         }
+ 
+         // Condición para actualizar:
+         // 1. El campo está vacío, O
+         // 2. El campo NO está vacío, PERO la última actualización fue automática (isEmailAutoUpdated = true)
+         //    Y el email potencial es diferente al actual (para evitar bucles innecesarios)
+         if (emailFieldValue === '' || (isEmailAutoUpdated && potentialAutoEmail !== emailFieldValue)) {
+             if (emailFieldValue === '') {
+                  console.log('DEBUG: Email field is empty, proceeding to generate and update.');
+             } else {
+                  console.log('DEBUG: Email field has auto-content, proceeding to update.');
+             }
+ 
+             // Usar el potentialAutoEmail ya calculado
+             if (potentialAutoEmail) {
+                 $customerEmailInput.val(potentialAutoEmail);
+                 console.log('Email autocompletado/actualizado:', potentialAutoEmail);
+                 isEmailAutoUpdated = true; // Marcar que la última actualización fue automática
+             } else {
+                 // Si los nombres están vacíos, limpiar el campo si fue auto-actualizado previamente
+                 if (isEmailAutoUpdated) {
+                      $customerEmailInput.val('');
+                      console.log('DEBUG: Names are empty, clearing auto-updated email field.');
+                      // isEmailAutoUpdated = true; // Mantener true, la acción fue automática
+                 } else {
+                      console.log('DEBUG: No potential autoEmail generated (names likely empty).');
+                 }
+             }
+         } else {
+             if (emailFieldValue !== '' && !isEmailAutoUpdated) {
+                 console.log('DEBUG: Email field has manual content. No update performed.');
+             } else if (isEmailAutoUpdated && potentialAutoEmail === emailFieldValue) {
+                 console.log('DEBUG: Potential email matches current auto-updated content. No update needed.');
+             } else {
+                  console.log('DEBUG: Condition not met for update.');
+             }
+         }
+     }
+ 
+
     // --- Funciones de Cliente ---
     function showLoading(message = posBaseParams.i18n?.loading || 'Cargando...') {
         if (typeof Swal !== 'undefined') {
             Swal.fire({ title: message, allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         } else { console.log(message); }
+
+
     }
 
     function hideLoading() {
@@ -705,31 +792,38 @@ jQuery(function ($) {
         $customerFirstNameInput.val(''); $customerLastNameInput.val('');
         $customerEmailInput.val(''); $customerPhoneInput.val('');
         $customerAvatarIdInput.val('');
-        $customerNoteInput.val(''); // <-- AÑADIR ESTA LÍNEA
+        $customerNoteInput.val('');
         $customerAvatarPreview.attr('src', posBaseParams.default_avatar_url || '');
         $removeAvatarBtn.hide();
         $customerFormFeedback.hide().removeClass('notice-success notice-error').text('');
-        if (iti) { try { iti.setNumber(''); } catch(e) { console.warn("Error resetting iti number:", e); } }
+        if (iti) { try { iti.setNumber(''); } catch(e) { console.warn("Error resetting iti number:", e); } } isEmailAutoUpdated = false; // Resetear flag al limpiar formulario
         console.log('Customer form reset (manual)');
     }
+    
+
 
     function populateCustomerForm(customerData) {
-        resetCustomerForm();
+        resetCustomerForm(); // Esto ya resetea el flag a false
         $customerFormTitle.text(posBaseParams.i18n?.edit_customer || 'Editar Cliente');
         $customerIdInput.val(customerData.id);
         $customerFirstNameInput.val(customerData.first_name || '');
         $customerLastNameInput.val(customerData.last_name || '');
         $customerEmailInput.val(customerData.email || '');
-        if (iti && customerData.phone) { 
-            iti.setNumber(customerData.phone); 
-        } else { 
-            $customerPhoneInput.val(customerData.phone || ''); 
+        // Si el email cargado NO está vacío, significa que es manual/guardado
+        if ($customerEmailInput.val() !== '') {
+            isEmailAutoUpdated = false;
+        }
+        if (iti && customerData.phone) {
+            iti.setNumber(customerData.phone);
+        } else {
+            $customerPhoneInput.val(customerData.phone || '');
         }
         $customerNoteInput.val(customerData.note || ''); // <-- AÑADIR ESTA LÍNEA
         $customerAvatarIdInput.val(customerData.avatar_id || '');
         $customerAvatarPreview.attr('src', customerData.avatar_url || posBaseParams.default_avatar_url || '');
         if (customerData.avatar_id && customerData.avatar_url !== posBaseParams.default_avatar_url) { $removeAvatarBtn.show(); }
         else { $removeAvatarBtn.hide(); }
+        updateAutoEmail(); // Intentar autocompletar si el email quedó vacío
         console.log('Customer form populated for ID:', customerData.id);
     }
 
@@ -943,7 +1037,6 @@ jQuery(function ($) {
         }
         console.log('Tipo de venta cambiado a:', selectedType);
     }
-
     function handleCompleteSale() {
         if (isLoadingCheckoutAction || completeSaleButton.prop('disabled')) {
             console.warn("Checkout en progreso o botón deshabilitado.");
@@ -970,8 +1063,8 @@ jQuery(function ($) {
             return;
         }
 
-        const saleDate = $saleDateInput.val(); // <-- NUEVA LÍNEA
-        if (!saleDate) { // <-- NUEVA VALIDACIÓN (Opcional)
+        const saleDate = $saleDateInput.val();
+        if (!saleDate) {
             if (typeof Swal !== 'undefined') Swal.fire('Error', 'Por favor, selecciona una fecha de venta.', 'error');
             $saleDateInput.focus();
             return;
@@ -993,20 +1086,6 @@ jQuery(function ($) {
                 return; // Detener si faltan datos de suscripción base
             }
             subscriptionData = { title: title, expiry_date: expiryDate, color: color };
-
-            // --- INICIO: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
-            // Obtener el contenedor del selector (ya lo usamos antes)
-            const $profileSelectorWrap = $('.pos-streaming-profile-selector-wrap');
-            const selectedProfileId = $('#pos-streaming-profile-select').val(); // Obtener ID del select
-
-            // SOLO validar si el tipo es suscripción Y el selector está visible
-            if ($profileSelectorWrap.is(':visible') && (!selectedProfileId || selectedProfileId === '')) {
-                // Error: Se requiere perfil para suscripción
-                if (typeof Swal !== 'undefined') Swal.fire('Error', 'Debes seleccionar un perfil disponible para la suscripción.', 'error');
-                $('#pos-streaming-profile-select').focus(); // Enfocar el selector
-                return; // Detener la ejecución de completeSale
-            }
-            // --- FIN: VALIDACIÓN DEL PERFIL STREAMING (MODIFICADA) ---
         }
         // --- Fin Validar Campos de Suscripción ---
 
@@ -1047,10 +1126,10 @@ jQuery(function ($) {
             orderData.meta_data.push({ key: '_pos_subscription_color', value: subscriptionData.color });
         }
 
-        // --- INICIO: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
+        // --- INICIO: AÑADIR ID DEL PERFIL STREAMING A META_DATA (SIN CAMBIOS AQUÍ) ---
+        // Esta parte ya funciona correctamente: solo añade el meta si hay un valor seleccionado.
         if (saleType === 'subscription') {
             const selectedProfileId = $('#pos-streaming-profile-select').val();
-            // Ya validamos que no esté vacío arriba, pero volvemos a comprobar por seguridad
             if (selectedProfileId && selectedProfileId !== '') {
                 orderData.meta_data.push({
                     key: '_pos_assigned_profile_id',
@@ -1058,7 +1137,7 @@ jQuery(function ($) {
                 });
                 console.log('Añadido _pos_assigned_profile_id al pedido:', selectedProfileId);
             }
-            // No necesitamos un 'else' aquí porque ya validamos antes
+            // No necesitamos un 'else' aquí porque ahora es opcional
         }
         // --- FIN: AÑADIR ID DEL PERFIL STREAMING A META_DATA ---
 
@@ -1108,6 +1187,7 @@ jQuery(function ($) {
             });
         // --- Fin Enviar Pedido ---
     } // Fin handleCompleteSale
+
     
 
     async function loadPaymentMethods() {
@@ -1374,6 +1454,16 @@ jQuery(function ($) {
         $changeAvatarBtn.on('click', handleOpenMediaUploader);
         $removeAvatarBtn.on('click', handleRemoveAvatar);
         $changeCustomerBtn.on('click', handleDeselectCustomer);
+
+        // Autocompletar Email en Modal Cliente
+        $customerFirstNameInput.on('input', updateAutoEmail);
+        $customerLastNameInput.on('input', updateAutoEmail);
+
+        // Detectar edición manual del email para desactivar autocompletado futuro
+        $customerEmailInput.on('input', function() {
+            console.log('DEBUG: Manual input detected in email field.');
+            isEmailAutoUpdated = false; // El usuario está escribiendo manualmente
+        });
 
         // Búsqueda Cliente
         $customerSearchInput.on('input', handleCustomerSearchInput);

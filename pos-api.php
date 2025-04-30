@@ -995,22 +995,23 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         }
         // --- Fin metadatos ---
 
-        // --- INICIO: VALIDACIÓN REQUERIDA DE PERFIL STREAMING (SI APLICA) ---
+        // --- INICIO: VALIDACIÓN DE PERFIL STREAMING (AHORA OPCIONAL) ---
         // Obtener si el módulo está activo
         $active_modules = get_option( 'pos_base_active_modules', [] );
         $is_streaming_active = ( is_array( $active_modules ) && in_array( 'streaming', $active_modules, true ) );
 
-        // Validar SOLO si el módulo está activo Y es una venta de suscripción Y NO se encontró un perfil válido
-        if ( $is_streaming_active && $sale_type_from_meta === 'subscription' && empty( $assigned_profile_id ) ) {
-            // Lanzar el error que detendrá la creación del pedido
-            error_log('[Streaming Order ERROR] Venta de suscripción requiere perfil, pero no se proporcionó o no es válido/disponible. Módulo activo: ' . ($is_streaming_active ? 'Sí' : 'No'));
-            // Devolver un WP_Error detiene la ejecución y envía el mensaje al JS
-            return new WP_Error(
-                'profile_required', // Código de error único
-                __( 'Debes seleccionar un perfil disponible para la suscripción.', 'pos-streaming' ), // Mensaje de error
-                array( 'status' => 400 ) // Código de estado HTTP (Bad Request)
-            );
-        }
+        // --- COMENTADO: Ya no es obligatorio seleccionar un perfil ---
+        // // Validar SOLO si el módulo está activo Y es una venta de suscripción Y NO se encontró un perfil válido
+        // if ( $is_streaming_active && $sale_type_from_meta === 'subscription' && empty( $assigned_profile_id ) ) {
+        //     // Lanzar el error que detendrá la creación del pedido
+        //     error_log('[Streaming Order ERROR] Venta de suscripción requiere perfil, pero no se proporcionó o no es válido/disponible. Módulo activo: ' . ($is_streaming_active ? 'Sí' : 'No'));
+        //     // Devolver un WP_Error detiene la ejecución y envía el mensaje al JS
+        //     return new WP_Error(
+        //         'profile_required', // Código de error único
+        //         __( 'Debes seleccionar un perfil disponible para la suscripción.', 'pos-streaming' ), // Mensaje de error
+        //         array( 'status' => 400 ) // Código de estado HTTP (Bad Request)
+        //     );
+        // }
         // --- FIN: VALIDACIÓN REQUERIDA DE PERFIL STREAMING ---
 
         // Guardar pedido TEMPRANO para poder aplicar cupones y tener metadatos guardados
