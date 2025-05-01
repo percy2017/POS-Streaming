@@ -1349,7 +1349,11 @@ function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
                 $col1_html .= '</div>'; // fin #modal_id
             }
             // --- FIN: Acción y Modal SMS ---
-            
+
+            $pdf_nonce = wp_create_nonce('pos_generate_order_pdf_nonce');
+            $pdf_url = admin_url('admin-ajax.php?action=pos_generate_order_pdf&order_id=' . $order_id . '&_wpnonce=' . $pdf_nonce);
+            $col1_html .= '<a href="' . esc_url($pdf_url) . '" class="pos-action-print-pdf" title="' . esc_attr__('Imprimir Comprobante', 'pos-base') . '" target="_blank"> | Imprimir</a>';
+          
             $col1_html .= '</div>'; // Fin .row-actions
          
 

@@ -267,11 +267,11 @@ function pos_base_render_page() {
                     <table id="pos-sales-datatable" class="display wp-list-table widefat fixed striped" style="width:100%">
                         <thead>
                             <tr>
-                                <!-- Col 1 --> <th><?php esc_html_e( 'Pedido / Fecha / Tipo', 'pos-base' ); ?></th>
-                                <!-- Col 2 --> <th><?php esc_html_e( 'Cliente / Contacto', 'pos-base' ); ?></th>
+                                <!-- Col 1 --> <th><?php esc_html_e( 'Pedido', 'pos-base' ); ?></th>
+                                <!-- Col 2 --> <th><?php esc_html_e( 'Cliente', 'pos-base' ); ?></th>
                                 <!-- Col 3 --> <th><?php esc_html_e( 'Producto(s)', 'pos-base' ); ?></th> <!-- NUEVO -->
-                                <!-- Col 4 --> <th><?php esc_html_e( 'Vencimiento / Historial', 'pos-base' ); ?></th>
-                                <!-- Col 5 --> <th><?php esc_html_e( 'Notas / Detalles', 'pos-base' ); ?></th>
+                                <!-- Col 4 --> <th><?php esc_html_e( 'Historial', 'pos-base' ); ?></th>
+                                <!-- Col 5 --> <th><?php esc_html_e( 'Notas', 'pos-base' ); ?></th>
                             </tr>
                         </thead>
                         <tbody>

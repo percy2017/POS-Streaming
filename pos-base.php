@@ -357,4 +357,105 @@ function pos_base_add_settings_link( $actions, $plugin_file ) {
 }
 add_filter( 'plugin_action_links_' . plugin_basename( POS_BASE_PLUGIN_FILE ), 'pos_base_add_settings_link', 10, 2 );
 
+
+/**
+ * Registra las acciones AJAX del plugin.
+ */
+function pos_base_register_ajax_actions() {
+    // Acción AJAX para generar PDF de un pedido
+    add_action('wp_ajax_pos_generate_order_pdf', 'pos_ajax_generate_order_pdf');
+    // Podríamos añadir más acciones AJAX aquí si es necesario
+}
+add_action('init', 'pos_base_register_ajax_actions');
+
+/**
+ * Función AJAX para generar y enviar el PDF de un pedido.
+ */
+function pos_ajax_generate_order_pdf() {
+    // 1. Verificar Nonce y Permisos
+    if (!isset($_REQUEST['_wpnonce']) || !wp_verify_nonce($_REQUEST['_wpnonce'], 'pos_generate_order_pdf_nonce')) {
+        wp_send_json_error('Error de seguridad (nonce inválido).', 403);
+        wp_die();
+    }
+    if (!current_user_can('manage_woocommerce')) {
+        wp_send_json_error('No tienes permisos para realizar esta acción.', 403);
+        wp_die();
+    }
+
+    // 2. Obtener y Validar Order ID
+    if (!isset($_REQUEST['order_id'])) {
+        wp_send_json_error('Falta el ID del pedido.', 400);
+        wp_die();
+    }
+    $order_id = absint($_REQUEST['order_id']);
+    $order = wc_get_order($order_id);
+
+    if (!$order) {
+        wp_send_json_error('Pedido no encontrado.', 404);
+        wp_die();
+    }
+
+    // 3. Incluir y Configurar TCPDF
+    $tcpdf_path = POS_BASE_PLUGIN_DIR . 'vendor/tcpdf/tcpdf.php'; // <-- CORREGIDO
+    if (!file_exists($tcpdf_path)) {
+        wp_send_json_error('Librería TCPDF no encontrada.', 500);
+        wp_die();
+    }
+    require_once($tcpdf_path);
+
+    // Crear instancia de TCPDF (podríamos crear una clase extendida si necesitamos personalizaciones)
+    // Usaremos un formato tipo ticket/recibo pequeño, por ejemplo 80mm de ancho.
+    // Podríamos hacerlo configurable más adelante.
+    $pageLayout = array(80, 297); // Ancho 80mm, Alto variable (A4 height for now)
+    $pdf = new TCPDF('P', 'mm', $pageLayout, true, 'UTF-8', false);
+
+    // Configurar metadatos y opciones básicas
+    $pdf->SetCreator(PDF_CREATOR);
+    $pdf->SetAuthor(wp_get_current_user()->display_name);
+    $pdf->SetTitle('Comprobante Pedido #' . $order_id);
+    $pdf->SetSubject('Comprobante de Venta POS');
+
+    // Eliminar cabecera y pie de página por defecto de TCPDF
+    $pdf->setPrintHeader(false);
+    $pdf->setPrintFooter(false);
+
+    // Establecer márgenes pequeños para formato ticket
+    $pdf->SetMargins(5, 5, 5); // Izquierda, Arriba, Derecha
+    $pdf->SetAutoPageBreak(TRUE, 5); // Margen inferior
+
+    // Establecer fuente
+    $pdf->SetFont('helvetica', '', 9); // Fuente pequeña para ticket
+
+    // 4. Añadir Página y Contenido del PDF
+    $pdf->AddPage();
+
+    // --- Contenido del PDF (Ejemplo Básico) ---
+    // Aquí iría el código para generar el HTML o usar los métodos de TCPDF para añadir:
+    // - Logo y datos del negocio (Nombre, Dirección, Teléfono, etc.)
+    // - Datos del Pedido (Número, Fecha, Hora)
+    // - Datos del Cliente (Nombre, Teléfono)
+    // - Tabla de Items (Producto, Cantidad, Precio Unitario, Total Item)
+    // - Totales (Subtotal, Descuento, Impuestos, Total General)
+    // - Método de Pago
+    // - Mensaje de agradecimiento o términos
+
+    // Ejemplo simple:
+    $pdf->Cell(0, 10, 'COMPROBANTE PEDIDO #' . $order_id, 0, 1, 'C');
+    $pdf->Ln(5);
+    $pdf->Cell(0, 5, 'Fecha: ' . $order->get_date_created()->date_i18n(get_option('date_format') . ' ' . get_option('time_format')), 0, 1);
+    $pdf->Cell(0, 5, 'Cliente: ' . $order->get_formatted_billing_full_name(), 0, 1);
+    $pdf->Ln(5);
+    // ... (Añadir tabla de items y totales) ...
+    $pdf->MultiCell(0, 10, "Total: " . wc_price($order->get_total()), 0, 'L', 0, 1, '', '', true);
+    $pdf->Ln(5);
+    $pdf->Cell(0, 5, 'Gracias por su compra!', 0, 1, 'C');
+    // --- Fin Contenido del PDF ---
+
+    // 5. Enviar PDF al Navegador
+    $pdf->Output('comprobante-' . $order_id . '.pdf', 'I'); // 'I' para mostrar inline
+
+    // Terminar ejecución
+    wp_die();
+}
+
 ?>
