@@ -280,7 +280,27 @@ function pos_base_register_rest_routes() {
         'methods'             => WP_REST_Server::READABLE, // GET
         'callback'            => 'pos_base_api_get_calendar_events',
         'permission_callback' => 'pos_base_api_permissions_check',
-        // Podría tener args para 'start' y 'end' date si se implementa filtrado por fecha
+    ) );
+
+    // --- RUTA PARA OBTENER DETALLES DE UN EVENTO DEL CALENDARIO (PARA MODAL) ---
+    register_rest_route( $namespace, '/event-details', array(
+        'methods'             => WP_REST_Server::READABLE, // GET
+        'callback'            => 'pos_base_api_get_event_details',
+        'permission_callback' => 'pos_base_api_permissions_check',
+        'args'                => array(
+            'type' => array(
+                'description'       => __( 'Tipo de evento (subscription_expiry o account_expiry).', 'pos-base' ),
+                'type'              => 'string',
+                'required'          => true,
+                'enum'              => ['subscription_expiry', 'account_expiry'], // Validar los tipos esperados
+            ),
+            'id' => array(
+                'description'       => __( 'ID del pedido o de la cuenta.', 'pos-base' ),
+                'type'              => 'integer',
+                'required'          => true,
+                'sanitize_callback' => 'absint',
+            ),
+        ),
     ) );
 
     // --- RUTA PARA DATATABLES DE VENTAS ---
@@ -816,10 +836,6 @@ function pos_base_api_validate_coupon( WP_REST_Request $request ) {
 
 /**
  * Callback API: Crear un pedido.
- * Maneja la creación del pedido, asignación de items, precios, metadatos,
- * cupones, y la actualización del estado del perfil de streaming si aplica.
- * MODIFICADO: Añade validación de perfil solo si el módulo streaming está activo.
- * CORREGIDO: Ubicación del bloque set_date_created.
  */
 function pos_base_api_create_order( WP_REST_Request $request ) {
     // Parámetros ya validados/sanitizados por 'args'
@@ -999,21 +1015,6 @@ function pos_base_api_create_order( WP_REST_Request $request ) {
         // Obtener si el módulo está activo
         $active_modules = get_option( 'pos_base_active_modules', [] );
         $is_streaming_active = ( is_array( $active_modules ) && in_array( 'streaming', $active_modules, true ) );
-
-        // --- COMENTADO: Ya no es obligatorio seleccionar un perfil ---
-        // // Validar SOLO si el módulo está activo Y es una venta de suscripción Y NO se encontró un perfil válido
-        // if ( $is_streaming_active && $sale_type_from_meta === 'subscription' && empty( $assigned_profile_id ) ) {
-        //     // Lanzar el error que detendrá la creación del pedido
-        //     error_log('[Streaming Order ERROR] Venta de suscripción requiere perfil, pero no se proporcionó o no es válido/disponible. Módulo activo: ' . ($is_streaming_active ? 'Sí' : 'No'));
-        //     // Devolver un WP_Error detiene la ejecución y envía el mensaje al JS
-        //     return new WP_Error(
-        //         'profile_required', // Código de error único
-        //         __( 'Debes seleccionar un perfil disponible para la suscripción.', 'pos-streaming' ), // Mensaje de error
-        //         array( 'status' => 400 ) // Código de estado HTTP (Bad Request)
-        //     );
-        // }
-        // --- FIN: VALIDACIÓN REQUERIDA DE PERFIL STREAMING ---
-
         // Guardar pedido TEMPRANO para poder aplicar cupones y tener metadatos guardados
         $order->save();
 
@@ -1465,7 +1466,104 @@ function pos_base_api_get_sales_for_datatable( WP_REST_Request $request ) {
     return new WP_REST_Response( $response_data, 200 );
 }
 
+/**
+ * Callback API: Obtener detalles específicos de un evento del calendario para mostrar en un modal.
+ */
+function pos_base_api_get_event_details( WP_REST_Request $request ) {
+    // Parámetros ya validados y sanitizados por 'args'
+    $event_type = $request['type'];
+    $item_id = $request['id'];
 
+    error_log("POS Base DEBUG: Entrando en pos_base_api_get_event_details. Type: $event_type, ID: $item_id");
+
+    $details = array();
+
+    try {
+        if ( $event_type === 'subscription_expiry' ) {
+            $order = wc_get_order( $item_id );
+            if ( ! $order ) {
+                throw new Exception( __( 'Pedido no encontrado.', 'pos-base' ) );
+            }
+
+            $customer_id = $order->get_customer_id();
+            $customer_name = $order->get_formatted_billing_full_name() ?: __( 'Invitado', 'pos-base' );
+            $customer_link = $customer_id ? get_edit_user_link( $customer_id ) : '';
+            $phone = $order->get_billing_phone();
+            $expiry_date = $order->get_meta( '_pos_subscription_expiry_date', true );
+            $sub_title = $order->get_meta( '_pos_subscription_title', true );
+
+            // Formatear fecha
+            $formatted_expiry = $expiry_date;
+            if ( $expiry_date && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $expiry_date ) ) {
+                try {
+                    $date_obj = new DateTime( $expiry_date );
+                    $formatted_expiry = $date_obj->format( get_option( 'date_format' ) );
+                } catch (Exception $e) { /* Mantener fecha original si falla */ }
+            }
+
+            // Obtener productos
+            $products = array();
+            foreach ( $order->get_items() as $item ) {
+                $products[] = $item->get_name() . ' (x' . $item->get_quantity() . ')';
+            }
+
+            $details = array(
+                'type' => 'subscription',
+                'title' => sprintf( __( 'Detalles Vencimiento Suscripción #%d', 'pos-base' ), $item_id ),
+                'order_id' => $item_id,
+                'order_url' => $order->get_edit_order_url(),
+                'customer_name' => $customer_name,
+                'customer_link' => $customer_link,
+                'customer_phone' => $phone,
+                'subscription_title' => $sub_title ?: $customer_name, // Usar nombre cliente si no hay título
+                'expiry_date' => $formatted_expiry,
+                'products' => implode( ', ', $products ),
+            );
+
+        } elseif ( $event_type === 'account_expiry' ) {
+            $account_post = get_post( $item_id );
+            if ( ! $account_post || $account_post->post_type !== 'pos_account' ) {
+                throw new Exception( __( 'Cuenta no encontrada.', 'pos-streaming' ) );
+            }
+
+            $account_title = $account_post->post_title;
+            $account_type = get_post_meta( $item_id, '_pos_account_type', true );
+            $account_email = get_post_meta( $item_id, '_pos_account_email', true );
+            $expiry_date = get_post_meta( $item_id, '_pos_account_expiry_date', true );
+            $account_status = get_post_meta( $item_id, '_pos_account_status', true );
+
+            // Formatear fecha
+            $formatted_expiry = $expiry_date;
+            if ( $expiry_date && preg_match( '/^\d{4}-\d{2}-\d{2}$/', $expiry_date ) ) {
+                try {
+                    $date_obj = new DateTime( $expiry_date );
+                    $formatted_expiry = $date_obj->format( get_option( 'date_format' ) );
+                } catch (Exception $e) { /* Mantener fecha original si falla */ }
+            }
+
+            $details = array(
+                'type' => 'account',
+                'title' => sprintf( __( 'Detalles Vencimiento Cuenta: %s', 'pos-streaming' ), $account_title ),
+                'account_id' => $item_id,
+                'account_url' => get_edit_post_link( $item_id ),
+                'account_title' => $account_title,
+                'account_type' => $account_type ?: '-',
+                'account_email' => $account_email ?: '-',
+                'expiry_date' => $formatted_expiry,
+                'account_status' => $account_status ? ucfirst( $account_status ) : '-',
+            );
+        } else {
+            throw new Exception( __( 'Tipo de evento no válido.', 'pos-base' ) );
+        }
+
+        error_log("POS Base DEBUG: pos_base_api_get_event_details devolviendo datos para $event_type ID $item_id");
+        return new WP_REST_Response( $details, 200 );
+
+    } catch ( Exception $e ) {
+        error_log("POS Base ERROR: pos_base_api_get_event_details - " . $e->getMessage());
+        return new WP_Error( 'rest_event_details_error', $e->getMessage(), array( 'status' => 404 ) ); // 404 Not Found o 500
+    }
+}
 
 // =========================================================================
 // 3. FUNCIONES AUXILIARES Y DE PERMISOS

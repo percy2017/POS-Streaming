@@ -265,6 +265,25 @@ function pos_base_enqueue_assets( $hook_suffix ) {
                 'error_sending_message' => __( 'Error al enviar el mensaje.', 'pos-base' ),
                 'error_message_required' => __( 'Por favor, escribe un mensaje.', 'pos-base' ),
                 'error_phone_missing' => __( 'Falta el número de teléfono.', 'pos-base' ),
+
+                // Calendario Modal
+                'loading_subscription_details' => __( 'Cargando Detalles Suscripción...', 'pos-base' ),
+                'loading_account_details' => __( 'Cargando Detalles Cuenta...', 'pos-base' ),
+                'error_loading_event_details' => __( 'Error al cargar los detalles del evento.', 'pos-base' ),
+                'error_invalid_event_data' => __( 'Datos del evento inválidos o incompletos.', 'pos-base' ),
+                'error_unknown_event_type' => __( 'Tipo de evento desconocido.', 'pos-base' ),
+                'order_id' => __( 'Pedido ID:', 'pos-base' ),
+                'customer' => __( 'Cliente:', 'pos-base' ),
+                'phone' => __( 'Teléfono:', 'pos-base' ),
+                'subscription_title' => __( 'Título Suscripción:', 'pos-base' ),
+                'expiry_date' => __( 'Vencimiento:', 'pos-base' ),
+                'products' => __( 'Productos:', 'pos-base' ),
+                'view_order' => __( 'Ver Pedido Completo', 'pos-base' ),
+                'account_title' => __( 'Cuenta:', 'pos-base' ), // Reutiliza 'pos-streaming' si es específico
+                'account_type' => __( 'Tipo Cuenta:', 'pos-base' ), // Reutiliza 'pos-streaming' si es específico
+                'account_email' => __( 'Email Cuenta:', 'pos-base' ), // Reutiliza 'pos-streaming' si es específico
+                'account_status' => __( 'Estado Cuenta:', 'pos-base' ), // Reutiliza 'pos-streaming' si es específico
+                'edit_account' => __( 'Editar Cuenta', 'pos-base' ), // Reutiliza 'pos-streaming' si es específico
             )
         )
     );

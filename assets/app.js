@@ -1294,14 +1294,65 @@ jQuery(function ($) {
                 },
             },
             eventClick: function(info) {
+                // 1. Prevenir acción por defecto (como seguir un enlace si lo hubiera)
                 info.jsEvent.preventDefault();
-                const eventData = info.event; const props = eventData.extendedProps;
-                console.log('Evento clickeado:', eventData);
-                if (props.order_url) { window.open(props.order_url, '_blank'); }
-                else if (props.order_id && posBaseParams.admin_url) {
-                    const editUrl = `${posBaseParams.admin_url}admin.php?page=wc-orders&action=edit&id=${props.order_id}`;
-                    window.open(editUrl, '_blank');
-                } else { Swal.fire('Info', `Vencimiento: ${eventData.title}${props.order_id ? `\nPedido ID: ${props.order_id}` : ''}`, 'info'); }
+
+                const eventData = info.event;
+                const props = eventData.extendedProps;
+                const eventType = props.type; // 'subscription_expiry' o 'account_expiry'
+                const itemId = props.order_id || props.account_id; // ID del pedido o cuenta
+
+                console.log('Evento clickeado:', eventData, 'Tipo:', eventType, 'ID:', itemId);
+
+                if (!eventType || !itemId) {
+                    console.error('eventClick: Faltan datos del evento (type o id).', props);
+                    Swal.fire('Error', 'No se pueden mostrar los detalles: faltan datos del evento.', 'error');
+                    return;
+                }
+
+                // 2. Mostrar el modal Thickbox inmediatamente con estado "Cargando..."
+                const modalTitle = eventType === 'subscription_expiry'
+                                   ? posBaseParams.i18n.loading_subscription_details || 'Cargando Detalles Suscripción...'
+                                   : posBaseParams.i18n.loading_account_details || 'Cargando Detalles Cuenta...';
+                const modalContentContainer = '#pos-event-details-content';
+                const modalTarget = '#TB_inline?width=600&height=450&inlineId=pos-calendar-event-modal-content'; // ID del div oculto
+
+                // Limpiar contenido anterior y mostrar "Cargando"
+                $(modalContentContainer).html(`<p>${posBaseParams.i18n.loading || 'Cargando...'}</p>`);
+                tb_show(modalTitle, modalTarget);
+
+                // 3. Hacer llamada AJAX para obtener los detalles
+                // --- CAMBIO: Usar $.ajax para llamar a la API REST directamente ---
+                $.ajax({
+                    url: `${posBaseParams.rest_url}event-details`, // URL de nuestra API REST
+                    method: 'GET',
+                    beforeSend: function (xhr) {
+                        xhr.setRequestHeader('X-WP-Nonce', posBaseParams.nonce); // Nonce en la cabecera
+                    },
+                    data: {
+                        // Los parámetros van en la URL para GET
+                        type: eventType,
+                        id: itemId
+                    },
+                    success: function(response) { // 'response' ya es el objeto JSON
+                        console.log('Detalles del evento recibidos:', response);
+                        // 4. Construir HTML con los detalles recibidos
+                        let htmlContent = buildEventDetailsHtml(response);
+                        $(modalContentContainer).html(htmlContent);
+                        // Opcional: Reajustar tamaño del modal si es necesario después de cargar contenido
+                        // tb_position();
+                    },
+                    error: function(jqXHR, textStatus, errorThrown) {
+                        console.error('Error cargando detalles del evento:', textStatus, errorThrown, jqXHR.responseJSON);
+                        let errorMessage = posBaseParams.i18n.error_loading_event_details || 'Error al cargar los detalles.';
+                        // Intentar obtener mensaje de error de la respuesta JSON
+                        const error = jqXHR.responseJSON;
+                        if (error && error.message) {
+                            errorMessage += '<br><small>' + error.message + '</small>';
+                        }
+                        $(modalContentContainer).html(`<p style="color:red;">${errorMessage}</p>`);
+                    }
+                });
             },
             loading: function(isLoading) {
                 const calendarWrapper = $(calendarEl).closest('.pos-section-content');
@@ -1313,6 +1364,52 @@ jQuery(function ($) {
         calendar.render();
         console.log('FullCalendar inicializado.');
     }
+
+      /**
+     * Construye el HTML para mostrar los detalles del evento en el modal.
+     * @param {object} details Los datos del evento recibidos de la API.
+     * @returns {string} El HTML generado.
+     */
+      function buildEventDetailsHtml(details) {
+        if (!details || !details.type) {
+            return `<p style="color:red;">${posBaseParams.i18n.error_invalid_event_data || 'Datos del evento inválidos.'}</p>`;
+        }
+
+        let html = `<h4>${details.title || (details.type === 'subscription' ? 'Detalles Suscripción' : 'Detalles Cuenta')}</h4>`;
+        html += '<table class="pos-event-details-table">';
+
+        if (details.type === 'subscription') {
+            html += `<tr><th>${posBaseParams.i18n.order_id || 'Pedido:'}</th><td><a href="${details.order_url || '#'}" target="_blank">#${details.order_id}</a></td></tr>`;
+            html += `<tr><th>${posBaseParams.i18n.customer || 'Cliente:'}</th><td>${details.customer_link ? `<a href="${details.customer_link}" target="_blank">${details.customer_name}</a>` : details.customer_name}</td></tr>`;
+            if (details.customer_phone) {
+                html += `<tr><th>${posBaseParams.i18n.phone || 'Teléfono:'}</th><td><a href="tel:${details.customer_phone}">${details.customer_phone}</a></td></tr>`;
+            }
+            html += `<tr><th>${posBaseParams.i18n.subscription_title || 'Título Suscripción:'}</th><td>${details.subscription_title || '-'}</td></tr>`;
+            html += `<tr><th>${posBaseParams.i18n.expiry_date || 'Vencimiento:'}</th><td>${details.expiry_date || '-'}</td></tr>`;
+            if (details.products) {
+                html += `<tr><th>${posBaseParams.i18n.products || 'Productos:'}</th><td>${details.products}</td></tr>`;
+            }
+            html += '</table>';
+            html += `<p style="text-align:center; margin-top: 15px;"><a href="${details.order_url || '#'}" target="_blank" class="button button-primary">${posBaseParams.i18n.view_order || 'Ver Pedido Completo'}</a></p>`;
+
+        } else if (details.type === 'account') {
+            html += `<tr><th>${posBaseParams.i18n.account_title || 'Cuenta:'}</th><td>${details.account_title || '-'}</td></tr>`;
+            html += `<tr><th>${posBaseParams.i18n.account_type || 'Tipo Cuenta:'}</th><td>${details.account_type || '-'}</td></tr>`;
+            if (details.account_email) {
+                html += `<tr><th>${posBaseParams.i18n.account_email || 'Email Cuenta:'}</th><td>${details.account_email}</td></tr>`;
+            }
+            html += `<tr><th>${posBaseParams.i18n.expiry_date || 'Vencimiento:'}</th><td>${details.expiry_date || '-'}</td></tr>`;
+            html += `<tr><th>${posBaseParams.i18n.account_status || 'Estado Cuenta:'}</th><td>${details.account_status || '-'}</td></tr>`;
+            html += '</table>';
+            html += `<p style="text-align:center; margin-top: 15px;"><a href="${details.account_url || '#'}" target="_blank" class="button button-primary">${posBaseParams.i18n.edit_account || 'Editar Cuenta'}</a></p>`;
+
+        } else {
+            html = `<p style="color:orange;">${posBaseParams.i18n.error_unknown_event_type || 'Tipo de evento desconocido.'}</p>`;
+        }
+
+        return html;
+    }
+    
 
     /**
      * Inicializa la tabla de ventas con DataTables.

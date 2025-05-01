@@ -124,49 +124,18 @@
             }
         });
 
-        // --- Modificar la recolección de datos para la venta ---
-        // ESTA PARTE SIGUE SIENDO UN EJEMPLO Y NECESITA INTEGRACIÓN
-        // Idealmente, engancharse a un filtro/evento de app.js
-        // Ejemplo TEMPORAL:
-        /*
-        // Suponiendo que tienes acceso a la variable 'orderData' antes de enviarla
-        // y que la llamada AJAX se hace en una función como 'sendOrderRequest(orderData)'
-
-        // Podrías interceptar o modificar 'sendOrderRequest' o el objeto 'orderData'
-        function prepareOrderDataBeforeSend(originalOrderData) {
-            let modifiedOrderData = $.extend(true, {}, originalOrderData); // Clonar objeto
-
-            if ($('#pos-sale-type').val() === 'subscription') {
-                const selectedProfileId = $('#pos-streaming-profile-select').val();
-                if (selectedProfileId) {
-                    if (!modifiedOrderData.meta_data) {
-                        modifiedOrderData.meta_data = [];
-                    } else if (!Array.isArray(modifiedOrderData.meta_data)) {
-                         modifiedOrderData.meta_data = [];
-                    }
-                    // Evitar duplicados si ya existe
-                    modifiedOrderData.meta_data = modifiedOrderData.meta_data.filter(meta => meta.key !== '_pos_assigned_profile_id');
-                    // Añadir el metadato
-                    modifiedOrderData.meta_data.push({
-                        key: '_pos_assigned_profile_id',
-                        value: selectedProfileId
-                    });
-                    console.log('Added profile ID to order data:', selectedProfileId);
-                } else {
-                     console.warn('No profile selected for subscription sale.');
-                     // Podrías mostrar un error aquí y detener el proceso
-                     // Swal.fire('Error', 'Debes seleccionar un perfil para la suscripción.', 'error');
-                     // throw new Error('Profile selection required'); // Lanzar error para detener
-                }
-            }
-            return modifiedOrderData;
+        if ($('body').hasClass('post-type-pos_account') && $('body').hasClass('edit-php')) {
+            var listProfilesUrl = '/wp-admin/edit.php?post_type=pos_profile'; // URL de la lista de todos los perfiles
+            var listProfilesButton = ' <a href="' + listProfilesUrl + '" class="page-title-action">' + 'Listar Perfiles' + '</a>'; // Usar la misma clase y texto directo
+            $('a.page-title-action').first().after(listProfilesButton);
         }
 
-        // Luego, donde se llame a la función que envía el pedido:
-        // const finalOrderData = prepareOrderDataBeforeSend(orderData);
-        // sendOrderRequest(finalOrderData);
-        */
-        // --- Fin Modificación Temporal ---
+        if ($('body').hasClass('post-type-pos_profile') && $('body').hasClass('edit-php')) {
+            console.log("entro en esta funcion........")
+            var listAccountsUrl = '/wp-admin/edit.php?post_type=pos_account'; // URL de la lista de cuentas
+            var listAccountsButton = ' <a href="' + listAccountsUrl + '" class="page-title-action">' + 'Listar Cuentas' + '</a>'; // Usar la misma clase y texto nuevo
+            $('a.page-title-action').first().after(listAccountsButton);
+        }
 
     }); // Fin document.ready
 

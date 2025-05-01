@@ -181,15 +181,14 @@ function pos_base_render_page() {
                             <h2><?php esc_html_e( 'Pago', 'pos-streaming' ); ?></h2>
                             <div class="pos-section-content">
                             <label for="pos-sale-date" style="display: block; margin-bottom: 5px; font-weight: bold;">
-        <?php esc_html_e( 'Fecha Venta:', 'pos-base' ); ?>
-    </label>
-    <input type="date"
-           id="pos-sale-date"
-           name="pos_sale_date"
-           value="<?php echo esc_attr( date('Y-m-d', strtotime(current_time('mysql'))) ); ?>"
-           class="regular-text"
-           style="width: 100%;"
-    >
+                            <?php esc_html_e( 'Fecha Venta:', 'pos-base' ); ?>
+                            </label>
+                            <input type="date"
+                                id="pos-sale-date"
+                                name="pos_sale_date"
+                                value="<?php echo esc_attr( date('Y-m-d', strtotime(current_time('mysql'))) ); ?>"
+                                class="regular-text"
+                                style="width: 100%;">
                                 <div class="pos-sale-type-area">
                                     <label for="pos-sale-type"><?php esc_html_e( 'Tipo de Venta:', 'pos-streaming' ); ?></label>
                                     <select id="pos-sale-type" name="pos_sale_type">
@@ -281,6 +280,12 @@ function pos_base_render_page() {
                     </table>
                 </div>
             </div> <!-- /#pos-tab-sales -->
+            
+            <div id="pos-calendar-event-modal-content" style="display:none;">
+                <div id="pos-event-details-content" class="pos-modal-content">
+                    <p><?php esc_html_e( 'Cargando detalles del evento...', 'pos-base' ); ?></p>
+                </div>
+            </div>
 
         </div> <!-- /#pos-tab-content-wrapper -->
 

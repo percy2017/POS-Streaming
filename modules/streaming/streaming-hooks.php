@@ -25,6 +25,7 @@ function streaming_add_account_columns( $columns ) {
     $new_columns['email_user'] = __( 'Email / Usuario', 'pos-streaming' );
     $new_columns['profiles_count'] = __( 'Perfiles', 'pos-streaming' );
     $new_columns['expiry_date'] = __( 'Vencimiento', 'pos-streaming' );
+    $new_columns['associated_profiles'] = __( 'Perfiles Asociados', 'pos-streaming' ); // Nueva columna
     $new_columns['logo'] = __( 'Logo', 'pos-streaming' ); // Para la imagen destacada
 
     // Eliminar la columna de fecha por defecto (opcional)
@@ -70,6 +71,35 @@ function streaming_display_account_column_content( $column_name, $post_id ) {
             }
             break;
 
+        case 'associated_profiles':
+            $args = array(
+                'post_type'      => 'pos_profile',
+                'post_status'    => 'any', // Considerar todos los estados
+                'posts_per_page' => -1,
+                'meta_key'       => '_pos_profile_parent_account_id',
+                'meta_value'     => $post_id, // ID de la cuenta actual
+                'orderby'        => 'title',
+                'order'          => 'ASC',
+            );
+            $profiles_query = new WP_Query( $args );
+            if ( $profiles_query->have_posts() ) {
+                $profile_links = array();
+                while ( $profiles_query->have_posts() ) {
+                    $profiles_query->the_post();
+                    $profile_id = get_the_ID();
+                    $profile_title = get_the_title();
+                    $edit_link = get_edit_post_link( $profile_id );
+                    if ($edit_link) {
+                        $profile_links[] = '<a href="' . esc_url( $edit_link ) . '">' . esc_html( $profile_title ) . '</a>';
+                    } else {
+                        $profile_links[] = esc_html( $profile_title );
+                    }
+                }
+                echo implode( '<br>', $profile_links ); // Mostrar uno por línea
+                wp_reset_postdata();
+            } else { echo '—'; } // Mostrar guión si no hay perfiles
+            break;
+
         case 'logo':
             if ( has_post_thumbnail( $post_id ) ) {
                 // Mostrar la miniatura con un tamaño pequeño
@@ -84,6 +114,39 @@ function streaming_display_account_column_content( $column_name, $post_id ) {
 }
 // Enganchar a la acción específica para el CPT pos_account
 add_action( 'manage_pos_account_posts_custom_column', 'streaming_display_account_column_content', 10, 2 );
+
+/**
+ * Hace que la columna 'Vencimiento' sea ordenable en la tabla de Cuentas Streaming.
+ *
+ * @param array $sortable_columns Array de columnas ordenables existentes.
+ * @return array Array modificado con la columna 'expiry_date'.
+ */
+function streaming_make_account_columns_sortable( $sortable_columns ) {
+    $sortable_columns['expiry_date'] = 'expiry_date'; // 'expiry_date' es el identificador que usaremos en la query
+    return $sortable_columns;
+}
+add_filter( 'manage_edit-pos_account_sortable_columns', 'streaming_make_account_columns_sortable' );
+
+/**
+ * Modifica la consulta principal para ordenar por fecha de vencimiento cuando se solicita.
+ *
+ * @param WP_Query $query La consulta principal de WordPress.
+ */
+function streaming_sort_accounts_by_expiry_date( $query ) {
+    // Solo modificar la consulta en el admin, para el CPT correcto y si no es la consulta principal
+    if ( ! is_admin() || ! $query->is_main_query() || $query->get( 'post_type' ) !== 'pos_account' ) {
+        return;
+    }
+
+    // Verificar si se está ordenando por nuestra columna 'expiry_date'
+    if ( $query->get( 'orderby' ) === 'expiry_date' ) {
+        $query->set( 'meta_key', '_pos_account_expiry_date' ); // El meta key que contiene la fecha
+        // Usar 'meta_value_date' para una ordenación de fechas más precisa (requiere formato YYYY-MM-DD)
+        $query->set( 'orderby', 'meta_value_date' );
+        // $query->set( 'orderby', 'meta_value' ); // Fallback a ordenación de texto si 'meta_value_date' falla
+    }
+}
+add_action( 'pre_get_posts', 'streaming_sort_accounts_by_expiry_date' );
 
 
 /**
@@ -198,5 +261,72 @@ function streaming_display_profile_column_content( $column_name, $post_id ) {
 // Enganchar a la acción específica para el CPT pos_profile
 add_action( 'manage_pos_profile_posts_custom_column', 'streaming_display_profile_column_content', 10, 2 );
 
+/**
+ * Añade un enlace "Volver a la lista" en el cuadro de publicación para Cuentas Streaming.
+ *
+ * @param WP_Post $post El objeto del post actual.
+ */
+function streaming_add_back_to_list_button_in_publish_box( $post ) {
+    // Verificar si estamos en el tipo de post 'pos_account'
+    if ( 'pos_account' === $post->post_type ) {
+        $list_url = admin_url( 'edit.php?post_type=pos_account' );
+        ?>
+        <div class="misc-pub-section misc-pub-back-to-list">
+            <span class="dashicons dashicons-list-view" style="vertical-align: middle; margin-right: 5px;"></span>
+            <a href="<?php echo esc_url( $list_url ); ?>" class="button button-small">
+                <?php esc_html_e( 'Volver a Cuentas', 'pos-streaming' ); ?>
+            </a>
+        </div>
+        <?php
+    }
+}
+// Enganchar a la acción que se ejecuta dentro del cuadro de publicación
+add_action( 'post_submitbox_misc_actions', 'streaming_add_back_to_list_button_in_publish_box' );
 
-?>
+/**
+ * Encola scripts específicos para el admin del módulo Streaming.
+ *
+ * @param string $hook_suffix El sufijo del hook de la página actual.
+ */
+function streaming_enqueue_admin_scripts( $hook_suffix ) {
+    global $pagenow, $typenow;
+
+    // Verificar si estamos en la página de listado de Cuentas Streaming
+    if ( 'edit.php' === $pagenow && 'pos_account' === $typenow ) {
+        // Obtener la URL base del módulo
+        // Asume estructura /modules/streaming/ desde el archivo principal del plugin
+        $module_url = plugin_dir_url( dirname( __FILE__, 2 ) ) . 'modules/streaming/';
+
+        wp_enqueue_script(
+            'streaming-admin-script', // Handle único
+            $module_url . 'assets/js/streaming-app.js', // Ruta al archivo JS (Usamos streaming-app.js como acordamos)
+            array( 'jquery' ), // Dependencia de jQuery
+            defined('POS_BASE_VERSION') ? POS_BASE_VERSION : '1.0.0', // Versión
+            true // Cargar en el footer
+        );
+    }
+}
+add_action( 'admin_enqueue_scripts', 'streaming_enqueue_admin_scripts' );
+
+/**
+ * Añade clases CSS al body en el área de administración para el CPT pos_account.
+ * Esto ayuda a que el JavaScript pueda identificar la página correcta.
+ *
+ * @param string $classes Clases existentes del body.
+ * @return string Clases modificadas del body.
+ */
+function streaming_add_admin_body_classes( $classes ) {
+    global $pagenow, $typenow;
+
+    // Añadir clases en la página de listado de Cuentas
+    if ( 'edit.php' === $pagenow && 'pos_account' === $typenow ) {
+        $classes .= ' post-type-pos_account edit-php'; // Añadir las clases necesarias
+    } // Añadir clases en la página de listado de Perfiles
+    elseif ( 'edit.php' === $pagenow && 'pos_profile' === $typenow ) {
+        $classes .= ' post-type-pos_profile edit-php'; // Corregido: Añadir la clase correcta para perfiles
+    }
+    // Podríamos añadir más condiciones para otras páginas si fuera necesario
+
+    return $classes;
+}
+add_filter( 'admin_body_class', 'streaming_add_admin_body_classes' );

@@ -843,3 +843,49 @@
 #pos-sales-datatable tr:hover .row-actions {
     visibility: visible;
 }
+
+
+/* --- Estilos para el Modal de Detalles del Evento del Calendario (Thickbox) --- */
+
+/* Contenedor principal dentro del Thickbox */
+#pos-event-details-content {
+    padding: 15px 25px;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* Título del modal */
+#pos-event-details-content h4 {
+    margin-top: 0;
+    margin-bottom: 20px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3338;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+}
+
+/* Tabla de detalles */
+.pos-event-details-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+}
+
+.pos-event-details-table th,
+.pos-event-details-table td {
+    text-align: left;
+    padding: 8px 5px;
+    border-bottom: 1px solid #f0f0f1; /* Línea sutil entre filas */
+}
+
+.pos-event-details-table th {
+    width: 35%; /* Ancho para las etiquetas */
+    font-weight: 600;
+    color: #50575e;
+}
+
+/* Estilo para el párrafo del botón (centrado) */
+#pos-event-details-content p[style*="text-align:center"] {
+    margin-top: 25px;
+}

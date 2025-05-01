@@ -97,18 +97,6 @@ function streaming_account_metabox_html( $post ) { // $post no se usa para el ID
 
     wp_nonce_field( 'streaming_save_account_details_action', 'streaming_account_nonce' );
 
-    $supported_providers = array(
-        'netflix'     => 'Netflix',
-        'disney_plus' => 'Disney+',
-        'hbo_max'     => 'HBO Max (Max)',
-        'prime_video' => 'Amazon Prime Video',
-        'spotify'     => 'Spotify',
-        'youtube_premium' => 'YouTube Premium',
-        'flujo_tv' => 'Flujo Tv',
-		'mas_tv' => 'Mas Tv',
-		'gx_max' => 'Gx Max',
-        'other'       => __( 'Otro', 'pos-streaming' ),
-    );
 
     // Obtener valores guardados USANDO $current_post_id
     $provider       = get_post_meta( $current_post_id, '_pos_account_provider', true );
@@ -126,19 +114,6 @@ function streaming_account_metabox_html( $post ) { // $post no se usa para el ID
     <style> .form-table th { width: 150px; } </style>
     <table class="form-table">
         <tbody>
-            <!-- Campo Proveedor -->
-            <tr>
-                <th scope="row"><label for="pos-account-provider"><?php esc_html_e( 'Proveedor', 'pos-streaming' ); ?></label></th>
-                <td>
-                    <select id="pos-account-provider" name="_pos_account_provider" class="regular-text">
-                        <option value=""><?php esc_html_e( '-- Selecciona Proveedor --', 'pos-streaming' ); ?></option>
-                        <?php foreach ( $supported_providers as $provider_key => $provider_label ) : ?>
-                            <option value="<?php echo esc_attr( $provider_key ); ?>" <?php selected( $provider, $provider_key ); ?>><?php echo esc_html( $provider_label ); ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                    <p class="description"><?php esc_html_e( 'Selecciona el servicio de streaming para esta cuenta.', 'pos-streaming' ); ?></p>
-                </td>
-            </tr>
             <!-- Campo Email/Usuario -->
             <tr>
                 <th scope="row"><label for="pos-account-email-user"><?php esc_html_e( 'Email / Usuario', 'pos-streaming' ); ?></label></th>
@@ -260,7 +235,11 @@ function streaming_account_related_profiles_html( $post ) { // $post no se usa p
         echo '<p>' . esc_html__( 'No hay perfiles asociados a esta cuenta todavía.', 'pos-streaming' ) . '</p>';
     }
 
-    $add_new_profile_url = admin_url('post-new.php?post_type=pos_profile');
+    // Añadir el ID de la cuenta actual a la URL para preseleccionar
+    $add_new_profile_url = add_query_arg(
+        array('post_type' => 'pos_profile', 'parent_account_id' => $account_id),
+        admin_url('post-new.php')
+    );
     echo '<p style="margin-top: 10px;">';
     echo '<a href="' . esc_url( $add_new_profile_url ) . '" class="button button-secondary">' . esc_html__('Añadir Nuevo Perfil', 'pos-streaming') . '</a>';
     echo '</p>';
@@ -276,7 +255,7 @@ function streaming_profile_metabox_html( $post ) {
     // --- OBTENER EL ID CORRECTO (ROBUSTAMENTE) ---
     // Aplicamos la misma lógica aquí por si acaso
     $current_post_id = streaming_get_current_post_id_robustly();
-    if ( ! $current_post_id ) {
+    if ( ! $current_post_id && $GLOBALS['pagenow'] !== 'post-new.php' ) { // Permitir en post-new.php
         echo '<p>Error: No se pudo determinar el ID del perfil actual.</p>';
         return;
     }
@@ -284,10 +263,19 @@ function streaming_profile_metabox_html( $post ) {
 
     wp_nonce_field( 'streaming_save_profile_details_action', 'streaming_profile_nonce' );
 
-    // Obtener valores guardados USANDO $current_post_id
-    $parent_account_id = get_post_meta( $current_post_id, '_pos_profile_parent_account_id', true );
-    $profile_pin       = get_post_meta( $current_post_id, '_pos_profile_pin', true );
-    $profile_status    = get_post_meta( $current_post_id, '_pos_profile_status', true );
+    // Obtener valores guardados USANDO $current_post_id (para edición)
+    $parent_account_id = $current_post_id ? get_post_meta( $current_post_id, '_pos_profile_parent_account_id', true ) : false;
+    $profile_pin       = $current_post_id ? get_post_meta( $current_post_id, '_pos_profile_pin', true ) : '';
+    $profile_status    = $current_post_id ? get_post_meta( $current_post_id, '_pos_profile_status', true ) : '';
+
+    // --- PRESELECCIÓN EN PANTALLA 'AÑADIR NUEVO' ---
+    // Si estamos en la pantalla de añadir nuevo (post-new.php) y se pasó un ID de cuenta padre en la URL
+    global $pagenow;
+    if ( $pagenow === 'post-new.php' && isset( $_GET['parent_account_id'] ) && empty( $parent_account_id ) ) {
+        $parent_account_id = absint( $_GET['parent_account_id'] );
+        error_log('[DEBUG Metabox Load - Preselect Parent] Using parent_account_id from URL: ' . $parent_account_id);
+    }
+    // --- FIN PRESELECCIÓN ---
 
     $possible_statuses = array(
         'available'    => __( 'Disponible', 'pos-streaming' ),
@@ -304,7 +292,13 @@ function streaming_profile_metabox_html( $post ) {
                 <th scope="row"><label for="pos-profile-parent-account"><?php esc_html_e( 'Cuenta Padre', 'pos-streaming' ); ?></label></th>
                 <td>
                     <?php
-                    $accounts_query = new WP_Query( array(/*...*/ 'post_type' => 'pos_account', 'post_status' => 'publish', 'posts_per_page' => -1, 'orderby' => 'title', 'order' => 'ASC') );
+                    $accounts_query = new WP_Query( array(
+                        'post_type' => 'pos_account',
+                        'post_status' => 'publish', // O 'any' si quieres incluir borradores, etc.
+                        'posts_per_page' => -1,
+                        'orderby' => 'title',
+                        'order' => 'ASC'
+                    ) );
                     if ( $accounts_query->have_posts() ) : ?>
                         <select id="pos-profile-parent-account" name="_pos_profile_parent_account_id" class="regular-text">
                             <option value=""><?php esc_html_e( '-- Selecciona una Cuenta --', 'pos-streaming' ); ?></option>
@@ -346,6 +340,7 @@ function streaming_profile_metabox_html( $post ) {
 }
 
 
+
 /**
  * Guarda los datos de los metaboxes cuando se guarda un CPT del módulo.
  *
@@ -366,18 +361,71 @@ function streaming_save_metabox_data( $post_id, $post ) {
 
     // --- Guardar Datos Específicos de 'pos_account' ---
     if ( $post->post_type === 'pos_account' ) {
-        $account_fields = array( /*...*/ '_pos_account_provider' => 'sanitize_key', '_pos_account_email_user' => 'sanitize_text_field', '_pos_account_password' => null, '_pos_account_pin' => 'sanitize_text_field', '_pos_account_profiles_count' => 'absint', '_pos_account_expiry_date' => 'sanitize_text_field', '_pos_account_description' => 'sanitize_textarea_field' );
-        $valid_providers = array('netflix', 'disney_plus', 'hbo_max', 'prime_video', 'spotify', 'youtube_premium', 'other');
+        $account_fields = array(
+            // '_pos_account_provider' => 'sanitize_key', // Eliminado: Se maneja por el metabox de taxonomía estándar
+            '_pos_account_email_user' => 'sanitize_text_field',
+            '_pos_account_password' => null, // No sanitizar aquí, se guarda tal cual
+            '_pos_account_pin' => 'sanitize_text_field',
+            '_pos_account_profiles_count' => 'absint',
+            '_pos_account_expiry_date' => 'sanitize_text_field',
+            '_pos_account_description' => 'sanitize_textarea_field'
+        );
+
         foreach ( $account_fields as $meta_key => $sanitize_callback ) {
             if ( isset( $_POST[$meta_key] ) ) {
-                $value = $_POST[$meta_key]; $sanitized_value = $value;
-                if ( $sanitize_callback && function_exists( $sanitize_callback ) ) { $sanitized_value = call_user_func( $sanitize_callback, $value ); }
-                $is_valid = true;
-                if ($meta_key === '_pos_account_provider' && !in_array($sanitized_value, $valid_providers)) { $is_valid = false; }
-                if ($meta_key === '_pos_account_expiry_date' && !empty($sanitized_value) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $sanitized_value)) { $is_valid = false; }
-                if ( $is_valid && (! empty( $sanitized_value ) || $meta_key === '_pos_account_password' || $meta_key === '_pos_account_pin') ) { update_post_meta( $post_id, $meta_key, $sanitized_value ); }
-                else { delete_post_meta( $post_id, $meta_key ); }
-            } else { delete_post_meta( $post_id, $meta_key ); }
+                $value = $_POST[$meta_key];
+                $sanitized_value = $value; // Valor por defecto
+
+                // Sanitizar si hay callback y existe la función
+                if ( $sanitize_callback && function_exists( $sanitize_callback ) ) {
+                    $sanitized_value = call_user_func( $sanitize_callback, $value );
+                }
+
+                $is_valid = true; // Asumir validez inicial
+
+                // Validación específica para fecha
+                if ($meta_key === '_pos_account_expiry_date' && !empty($sanitized_value) && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $sanitized_value)) {
+                    $is_valid = false;
+                    error_log('[Streaming Save Error] Invalid date format for _pos_account_expiry_date: ' . $sanitized_value);
+                }
+
+                if ( $is_valid ) {
+                    // Guardar o actualizar si hay valor (o si es contraseña/pin que pueden estar vacíos intencionalmente)
+                    if ( ! empty( $sanitized_value ) || $meta_key === '_pos_account_password' || $meta_key === '_pos_account_pin' ) {
+                        update_post_meta( $post_id, $meta_key, $sanitized_value );
+                        error_log('[Streaming Save DEBUG] Updated meta: ' . $meta_key . ' for post ' . $post_id . ' with value: ' . $sanitized_value);
+
+                        // La asignación del término 'streaming_provider' la hace el metabox estándar.
+
+                    } else {
+                        // Si el valor está vacío y no es contraseña/pin, eliminar el meta
+                        delete_post_meta( $post_id, $meta_key );
+                        error_log('[Streaming Save DEBUG] Deleted meta (empty value): ' . $meta_key . ' for post ' . $post_id);
+                    /*
+                        // Si se borra el proveedor, también quitar el término
+                        if ( $meta_key === '_pos_account_provider' ) {
+                             wp_set_object_terms( $post_id, null, 'streaming_provider', false );
+                             error_log('[Streaming Save DEBUG] Removed terms for streaming_provider from post ' . $post_id);
+                        }
+                    */
+                    }
+                } else {
+                    // Si no es válido (ej: fecha mal formateada), eliminar el meta para no guardar datos incorrectos
+                    delete_post_meta( $post_id, $meta_key );
+                    error_log('[Streaming Save DEBUG] Deleted meta (invalid value): ' . $meta_key . ' for post ' . $post_id);
+                }
+            } else {
+                // Si el campo no se envió en el POST, eliminar el meta
+                delete_post_meta( $post_id, $meta_key );
+                error_log('[Streaming Save DEBUG] Deleted meta (not in POST): ' . $meta_key . ' for post ' . $post_id);
+                /*
+                 // Si se borra el proveedor, también quitar el término
+                 if ( $meta_key === '_pos_account_provider' ) {
+                    wp_set_object_terms( $post_id, null, 'streaming_provider', false );
+                    error_log('[Streaming Save DEBUG] Removed terms for streaming_provider from post ' . $post_id . ' (field not in POST)');
+                */
+            //    } // <-- Esta llave de cierre estaba mal comentada, la corregí
+            }
         }
     }
     // --- Guardar Datos Específicos de 'pos_profile' ---
@@ -386,18 +434,33 @@ function streaming_save_metabox_data( $post_id, $post ) {
         // Guardar Cuenta Padre
         if ( isset( $_POST['_pos_profile_parent_account_id'] ) ) {
             $parent_id = absint( $_POST['_pos_profile_parent_account_id'] );
-            if ( $parent_id > 0 && get_post_type( $parent_id ) === 'pos_account' ) { update_post_meta( $post_id, '_pos_profile_parent_account_id', $parent_id ); }
-            else { delete_post_meta( $post_id, '_pos_profile_parent_account_id' ); }
-        } else { delete_post_meta( $post_id, '_pos_profile_parent_account_id' ); }
+            if ( $parent_id > 0 && get_post_type( $parent_id ) === 'pos_account' ) {
+                update_post_meta( $post_id, '_pos_profile_parent_account_id', $parent_id );
+            } else {
+                delete_post_meta( $post_id, '_pos_profile_parent_account_id' );
+            }
+        } else {
+            delete_post_meta( $post_id, '_pos_profile_parent_account_id' );
+        }
         // Guardar PIN del Perfil
-        if ( isset( $_POST['_pos_profile_pin'] ) ) { update_post_meta( $post_id, '_pos_profile_pin', sanitize_text_field( $_POST['_pos_profile_pin'] ) ); }
-        else { delete_post_meta( $post_id, '_pos_profile_pin' ); }
+        if ( isset( $_POST['_pos_profile_pin'] ) ) {
+            // Guardar incluso si está vacío, ya que un PIN vacío es válido
+            update_post_meta( $post_id, '_pos_profile_pin', sanitize_text_field( $_POST['_pos_profile_pin'] ) );
+        } else {
+            // Si no se envía, asumir que no hay PIN
+            delete_post_meta( $post_id, '_pos_profile_pin' );
+        }
         // Guardar Estado del Perfil
         if ( isset( $_POST['_pos_profile_status'] ) ) {
             $status = sanitize_key( $_POST['_pos_profile_status'] );
-            if ( in_array( $status, $valid_statuses ) ) { update_post_meta( $post_id, '_pos_profile_status', $status ); }
-            else { delete_post_meta( $post_id, '_pos_profile_status' ); }
-        } else { delete_post_meta( $post_id, '_pos_profile_status' ); }
+            if ( in_array( $status, $valid_statuses ) ) {
+                update_post_meta( $post_id, '_pos_profile_status', $status );
+            } else {
+                delete_post_meta( $post_id, '_pos_profile_status' );
+            }
+        } else {
+            delete_post_meta( $post_id, '_pos_profile_status' );
+        }
     }
 }
 

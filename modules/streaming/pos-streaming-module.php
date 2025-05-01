@@ -85,16 +85,16 @@ function streaming_add_admin_submenus() {
         25                                   // Posición (opcional, debe coincidir o ser mayor que la del CPT)
     );
 
-    // Añadir submenú para Perfiles Streaming
-    add_submenu_page(
-        'pos-base',                          // Slug del menú padre
-        __( 'Perfiles Streaming', 'pos-streaming' ), // Título de la página
-        __( 'Perfiles Streaming', 'pos-streaming' ), // Título del menú
-        'edit_posts',                        // Capacidad requerida
-        'edit.php?post_type=pos_profile',    // Slug/URL: apunta directamente a la lista de Perfiles
-        '',                                  // Sin función de callback directa
-        26                                   // Posición (opcional)
-    );
+    // // Añadir submenú para Perfiles Streaming (Comentado para unificar gestión en Cuentas)
+    // add_submenu_page(
+    //     'pos-base',                          // Slug del menú padre
+    //     __( 'Perfiles Streaming', 'pos-streaming' ), // Título de la página
+    //     __( 'Perfiles Streaming', 'pos-streaming' ), // Título del menú
+    //     'edit_posts',                        // Capacidad requerida
+    //     'edit.php?post_type=pos_profile',    // Slug/URL: apunta directamente a la lista de Perfiles
+    //     '',                                  // Sin función de callback directa
+    //     26                                   // Posición (opcional)
+    // );
 }
 add_action( 'admin_menu', 'streaming_add_admin_submenus', 20 );
 
