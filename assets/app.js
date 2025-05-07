@@ -86,6 +86,7 @@ jQuery(function ($) {
     // Cliente
     let customerDebounceTimer;
     let iti = null;
+    let crmMediaFrame = null; // Para el selector de medios del formulario CRM estándar
     let mediaFrame = null;
     let currentCustomerId = null;
     let isLoadingCustomerAction = false;
@@ -1340,7 +1341,93 @@ jQuery(function ($) {
                         let htmlContent = buildEventDetailsHtml(response);
                         $(modalContentContainer).html(htmlContent);
                         // Opcional: Reajustar tamaño del modal si es necesario después de cargar contenido
-                        // tb_position();
+                        
+                        // Definir selectores del formulario CRM AQUÍ, DESPUÉS de que el modal
+                        // y su contenido (htmlContent con el formulario) se hayan insertado.
+                        const $crmForm = $('#crm-standard-whatsapp-form');
+                        const $instanceSelector = $('#crm-standard-instance-selector');
+                        const $recipientPhoneField = $('#crm-standard-recipient-phone');
+                        const $messageTextField = $('#crm-standard-message-text'); // Selector para el campo de mensaje
+                        const $formFeedback = $('#crm-standard-form-feedback'); // Definido aquí para la limpieza inicial
+
+                        // Limpiar y ocultar por defecto el formulario CRM
+                        $crmForm.hide();
+                        $instanceSelector.empty().append('<option value="">Cargando instancias...</option>');
+                        $recipientPhoneField.val(''); // Limpiar teléfono inicialmente
+                        $messageTextField.val(''); // Limpiar mensaje inicialmente
+                        $formFeedback.empty().hide();
+
+                        // Intentar cargar instancias de CRM Evolution Sender
+                        $.ajax({
+                            url: posBaseParams.ajax_url,
+                            method: 'POST', // La mayoría de las acciones AJAX de WP son POST
+                            data: {
+                                action: 'crm_get_active_instances', // Acción definida en crm-evolution-sender
+                                security: posBaseParams.nonce // Usar el nonce para 'wp_rest' y el campo 'security'
+                            },
+                            success: function(crmResponse) {
+
+                                console.log('CRM: Respuesta de get_active_instances:', crmResponse);
+                                if (crmResponse.success && crmResponse.data && crmResponse.data.length > 0) {
+                                    console.log('CRM: Instancias válidas recibidas. Poblando selector y mostrando formulario.');
+                                    $instanceSelector.empty().append('<option value="">-- Selecciona Instancia --</option>');
+                                    crmResponse.data.forEach(function(instance) {
+                                        $instanceSelector.append($('<option>', {
+                                            value: instance.value, // instance_name
+                                            text: instance.text   // instance_name (Status)
+                                        }));
+                                    });
+
+                                    // Poblar el teléfono del destinatario AHORA, usando 'response' de event-details
+                                    if ($recipientPhoneField.length && response && response.customer_phone) {
+                                        $recipientPhoneField.val(response.customer_phone);
+                                        console.log('CRM: Teléfono del destinatario establecido:', response.customer_phone);
+                                    } else {
+                                        console.warn('CRM: No se pudo establecer el teléfono. $recipientPhoneField.length:', $recipientPhoneField.length, 'response.customer_phone:', response ? response.customer_phone : 'response undefined');
+                                    }
+
+                                    // Opcional: Establecer un mensaje predeterminado
+                                    if ($messageTextField.length && response) {
+                                       let defaultMessage = `Hola ${response.customer_name || 'cliente'},\n\n`;
+                                       defaultMessage += `Nos comunicamos referente a su suscripción "${response.subscription_title || '(sin título)'}" que vence el ${response.expiry_date || '(fecha no especificada)'}.\n\nSaludos.`;
+                                       $messageTextField.val(defaultMessage);
+                                       console.log('CRM: Mensaje predeterminado establecido.');
+                                    }
+
+                                    console.log('CRM: Selector de instancias ($instanceSelector):', $instanceSelector);
+                                    console.log('CRM: Formulario CRM ($crmForm):', $crmForm);
+                                    
+                                    if ($crmForm.length) { // Verificar si el formulario existe en el DOM
+                                        $crmForm.show(); 
+                                        console.log('CRM: $crmForm.show() ejecutado.');
+                                        if (typeof tb_position === 'function') {
+                                            tb_position(); // Reposicionar Thickbox
+                                        }
+                                    } else {
+                                        console.error('CRM: Elemento #crm-standard-whatsapp-form NO ENCONTRADO en el DOM.');
+                                    }
+                                } else {
+                                    $instanceSelector.empty().append('<option value="">No hay instancias activas</option>');
+                                    console.warn('CRM: No se encontraron instancias activas o hubo un error en la respuesta.', crmResponse);
+                                    if ($crmForm.length) {
+                                        $crmForm.hide(); // Asegurarse de ocultarlo si no hay instancias
+                                        console.log('CRM: $crmForm.hide() ejecutado porque no hay instancias/error.');
+                                        if (typeof tb_position === 'function') {
+                                            tb_position(); // Reposicionar Thickbox
+                                        }
+                                    }
+                                }
+                            },
+                            error: function(jqXHR, textStatus, errorThrown) {
+                                $instanceSelector.empty().append('<option value="">Error al cargar instancias</option>');
+                                console.error('CRM: Error al cargar instancias de Evolution API:', textStatus, errorThrown);
+                                if ($crmForm.length) $crmForm.hide(); // Ocultar también en caso de error AJAX
+                                if (typeof tb_position === 'function') {
+                                    tb_position(); // Reposicionar Thickbox
+                                }
+                            }
+                        });
+                        // --- FIN: Lógica para el formulario de WhatsApp Estándar ---
                     },
                     error: function(jqXHR, textStatus, errorThrown) {
                         console.error('Error cargando detalles del evento:', textStatus, errorThrown, jqXHR.responseJSON);
@@ -1384,10 +1471,14 @@ jQuery(function ($) {
             if (details.customer_phone) {
                 html += `<tr><th>${posBaseParams.i18n.phone || 'Teléfono:'}</th><td><a href="tel:${details.customer_phone}">${details.customer_phone}</a></td></tr>`;
             }
+  
             html += `<tr><th>${posBaseParams.i18n.subscription_title || 'Título Suscripción:'}</th><td>${details.subscription_title || '-'}</td></tr>`;
             html += `<tr><th>${posBaseParams.i18n.expiry_date || 'Vencimiento:'}</th><td>${details.expiry_date || '-'}</td></tr>`;
             if (details.products) {
                 html += `<tr><th>${posBaseParams.i18n.products || 'Productos:'}</th><td>${details.products}</td></tr>`;
+            }
+            if (details.customer_note) {
+                html += `<tr><th>${posBaseParams.i18n.customer_note || 'Nota Cliente:'}</th><td>${details.customer_note}</td></tr>`;
             }
             html += '</table>';
             html += `<p style="text-align:center; margin-top: 15px;"><a href="${details.order_url || '#'}" target="_blank" class="button button-primary">${posBaseParams.i18n.view_order || 'Ver Pedido Completo'}</a></p>`;
@@ -1575,6 +1666,120 @@ jQuery(function ($) {
         $couponCodeInput.on('keypress', function(event) { if (event.key === 'Enter') { event.preventDefault(); handleApplyCoupon(); } });
 
         // Checkout
+        $saleTypeSelect.on('change', handleSaleTypeChange);
+        completeSaleButton.on('click', handleCompleteSale);
+
+        // --- INICIO: Event Listeners para el Formulario CRM Estándar ---
+        // Botón para seleccionar archivo multimedia
+        $(document).on('click', '#crm-standard-select-media-button', function() {
+            if (isLoadingCustomerAction) return; // Reutilizar flag o crear uno específico si es necesario
+
+            if (typeof wp === 'undefined' || typeof wp.media === 'undefined') {
+                console.error('wp.media no está definido.');
+                $('#crm-standard-form-feedback').text('El cargador de medios no está disponible.').addClass('notice notice-error').show();
+                return;
+            }
+
+            if (crmMediaFrame) {
+                crmMediaFrame.open();
+                return;
+            }
+
+            crmMediaFrame = wp.media({
+                title: 'Seleccionar Archivo para WhatsApp',
+                button: { text: 'Usar este archivo' },
+                library: { type: ['image', 'video', 'audio', 'application/pdf'] }, // Permitir varios tipos
+                multiple: false
+            });
+
+            crmMediaFrame.on('select', function () {
+                const attachment = crmMediaFrame.state().get('selection').first().toJSON();
+                console.log('CRM Media selected:', attachment);
+                $('#crm-standard-media-url').val(attachment.url);
+                $('#crm-standard-media-filename').val(attachment.filename || attachment.name || attachment.title);
+                $('#crm-standard-media-preview').html(`Archivo: ${attachment.filename || attachment.name || attachment.title} <button type="button" id="crm-standard-remove-media-button" class="button-link delete-button" style="margin-left: 5px; color: #a00;" title="Quitar archivo">&times;</button>`);
+            });
+
+            crmMediaFrame.open();
+        });
+
+        // Botón para quitar archivo seleccionado
+        $(document).on('click', '#crm-standard-remove-media-button', function() {
+            $('#crm-standard-media-url').val('');
+            $('#crm-standard-media-filename').val('');
+            $('#crm-standard-media-preview').empty();
+        });
+
+        // Botón para enviar mensaje WhatsApp
+        $(document).on('click', '#crm-standard-send-button', function() {
+            const $button = $(this);
+            const $feedbackDiv = $('#crm-standard-form-feedback');
+            const instance = $('#crm-standard-instance-selector').val();
+            const recipientPhone = $('#crm-standard-recipient-phone').val(); // Este ya debería tener el JID o número
+            const message = $('#crm-standard-message-text').val();
+            const mediaUrl = $('#crm-standard-media-url').val();
+            const mediaFilename = $('#crm-standard-media-filename').val();
+
+            if (!instance) {
+                $feedbackDiv.text('Por favor, selecciona una instancia.').addClass('notice notice-error').show();
+                return;
+            }
+            if (!message && !mediaUrl) {
+                $feedbackDiv.text('Por favor, escribe un mensaje o selecciona un archivo.').addClass('notice notice-error').show();
+                return;
+            }
+            if (!recipientPhone) {
+                $feedbackDiv.text('No se encontró el teléfono del destinatario.').addClass('notice notice-error').show();
+                return;
+            }
+
+            $feedbackDiv.text(posBaseParams.i18n.sending_message || 'Enviando mensaje...').removeClass('notice-error notice-success').addClass('notice notice-info').show();
+            $button.prop('disabled', true);
+
+            const ajaxData = {
+                action: 'pos_send_standard_whatsapp_message',
+                _ajax_nonce: posBaseParams.nonce, // Usar el nonce general
+                instance_name: instance,
+                recipient_identifier: recipientPhone, // Este es el número de teléfono
+                message_content: message,
+                media_url: mediaUrl,
+                media_filename: mediaFilename
+            };
+
+            console.log('Enviando datos a pos_send_standard_whatsapp_message:', ajaxData);
+
+            $.ajax({
+                url: posBaseParams.ajax_url,
+                method: 'POST',
+                data: ajaxData,
+                success: function(response) {
+                    if (response.success) {
+                        $feedbackDiv.text(response.data.message || posBaseParams.i18n.message_sent_success || 'Mensaje enviado con éxito.').removeClass('notice-info notice-error').addClass('notice notice-success').show();
+                        // Limpiar campos después del envío exitoso
+                        $('#crm-standard-message-text').val('');
+                        $('#crm-standard-media-url').val('');
+                        $('#crm-standard-media-filename').val('');
+                        $('#crm-standard-media-preview').empty();
+                        // Opcional: cerrar el modal o resetear más cosas
+                    } else {
+                        $feedbackDiv.text(response.data.message || posBaseParams.i18n.error_sending_message || 'Error al enviar el mensaje.').removeClass('notice-info notice-success').addClass('notice notice-error').show();
+                    }
+                },
+                error: function(jqXHR, textStatus, errorThrown) {
+                    console.error('Error AJAX al enviar mensaje:', textStatus, errorThrown, jqXHR.responseText);
+                    let errorMsg = posBaseParams.i18n.error_sending_message || 'Error al enviar el mensaje.';
+                    if (jqXHR.responseJSON && jqXHR.responseJSON.data && jqXHR.responseJSON.data.message) {
+                        errorMsg = jqXHR.responseJSON.data.message;
+                    }
+                    $feedbackDiv.text(errorMsg).removeClass('notice-info notice-success').addClass('notice notice-error').show();
+                },
+                complete: function() {
+                    $button.prop('disabled', false);
+                }
+            });
+        });
+        // --- FIN: Event Listeners para el Formulario CRM Estándar ---
+
         $saleTypeSelect.on('change', handleSaleTypeChange);
         completeSaleButton.on('click', handleCompleteSale);
     }

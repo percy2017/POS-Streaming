@@ -363,7 +363,8 @@ add_filter( 'plugin_action_links_' . plugin_basename( POS_BASE_PLUGIN_FILE ), 'p
  */
 function pos_base_register_ajax_actions() {
     // Acción AJAX para generar PDF de un pedido
-    add_action('wp_ajax_pos_generate_order_pdf', 'pos_ajax_generate_order_pdf');
+    add_action( 'wp_ajax_pos_generate_order_pdf', 'pos_ajax_generate_order_pdf' );
+    add_action( 'wp_ajax_pos_send_standard_whatsapp_message', 'pos_send_standard_whatsapp_message_callback' ); // Nueva acción
     // Podríamos añadir más acciones AJAX aquí si es necesario
 }
 add_action('init', 'pos_base_register_ajax_actions');

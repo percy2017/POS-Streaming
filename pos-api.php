@@ -1493,6 +1493,22 @@ function pos_base_api_get_event_details( WP_REST_Request $request ) {
             $customer_name = $order->get_formatted_billing_full_name() ?: __( 'Invitado', 'pos-base' );
             $customer_link = $customer_id ? get_edit_user_link( $customer_id ) : '';
             $phone = $order->get_billing_phone();
+
+            // Obtener la última nota de pedido de tipo 'customer'
+            $order_customer_note = '';
+            $note_args = array(
+                'order_id' => $item_id, // $item_id es el order_id en este contexto
+                'type'     => 'customer', // Notas visibles para el cliente
+                'number'   => 1,          // Solo la última
+                'orderby'  => 'comment_date_gmt',
+                'order'    => 'DESC'
+            );
+            $order_notes = wc_get_order_notes( $note_args );
+            if ( ! empty( $order_notes ) ) {
+                $latest_note = reset( $order_notes );
+                $order_customer_note = $latest_note->content;
+            }
+
             $expiry_date = $order->get_meta( '_pos_subscription_expiry_date', true );
             $sub_title = $order->get_meta( '_pos_subscription_title', true );
 
@@ -1519,6 +1535,7 @@ function pos_base_api_get_event_details( WP_REST_Request $request ) {
                 'customer_name' => $customer_name,
                 'customer_link' => $customer_link,
                 'customer_phone' => $phone,
+                'customer_note' => $order_customer_note ?: '', // Usar la nota del pedido
                 'subscription_title' => $sub_title ?: $customer_name, // Usar nombre cliente si no hay título
                 'expiry_date' => $formatted_expiry,
                 'products' => implode( ', ', $products ),
@@ -1566,6 +1583,75 @@ function pos_base_api_get_event_details( WP_REST_Request $request ) {
     } catch ( Exception $e ) {
         error_log("POS Base ERROR: pos_base_api_get_event_details - " . $e->getMessage());
         return new WP_Error( 'rest_event_details_error', $e->getMessage(), array( 'status' => 404 ) ); // 404 Not Found o 500
+    }
+}
+
+/**
+ * Callback AJAX para enviar un mensaje de WhatsApp utilizando el formulario estándar
+ * y la función externa de crm-evolution-sender.
+ */
+function pos_send_standard_whatsapp_message_callback() {
+    // 1. Seguridad: Verificar Nonce y Permisos
+    // Usaremos el nonce 'wp_rest' que se pasa en posBaseParams.nonce
+    // Si se necesita un nonce específico para esta acción, habría que crearlo y pasarlo.
+    if ( ! isset( $_POST['_ajax_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_ajax_nonce'] ) ), 'wp_rest' ) ) {
+        wp_send_json_error( array( 'message' => __( 'Error de seguridad (nonce inválido).', 'pos-base' ) ), 403 );
+        return;
+    }
+
+    if ( ! current_user_can( 'manage_woocommerce' ) ) {
+        wp_send_json_error( array( 'message' => __( 'No tienes permisos para realizar esta acción.', 'pos-base' ) ), 403 );
+        return;
+    }
+
+    // 2. Obtener y Sanitizar Datos del POST
+    $instance_name        = isset( $_POST['instance_name'] ) ? sanitize_key( $_POST['instance_name'] ) : '';
+    $recipient_identifier = isset( $_POST['recipient_identifier'] ) ? sanitize_text_field( $_POST['recipient_identifier'] ) : ''; // Puede ser JID o número
+    $message_content      = isset( $_POST['message_content'] ) ? sanitize_textarea_field( $_POST['message_content'] ) : '';
+    $media_url            = isset( $_POST['media_url'] ) ? esc_url_raw( $_POST['media_url'] ) : null;
+    $media_filename       = isset( $_POST['media_filename'] ) ? sanitize_file_name( $_POST['media_filename'] ) : null;
+
+    // 3. Validar Datos
+    if ( empty( $instance_name ) ) {
+        wp_send_json_error( array( 'message' => __( 'Por favor, selecciona una instancia.', 'pos-base' ) ), 400 );
+        return;
+    }
+    if ( empty( $recipient_identifier ) ) {
+        wp_send_json_error( array( 'message' => __( 'Falta el identificador del destinatario.', 'pos-base' ) ), 400 );
+        return;
+    }
+    if ( empty( $message_content ) && empty( $media_url ) ) {
+        wp_send_json_error( array( 'message' => __( 'El mensaje o el archivo multimedia son obligatorios.', 'pos-base' ) ), 400 );
+        return;
+    }
+
+    // 4. Verificar si la función de CRM Evolution Sender existe
+    if ( ! function_exists( 'crm_external_send_whatsapp_message' ) ) {
+        wp_send_json_error( array( 'message' => __( 'La funcionalidad de envío de WhatsApp (CRM Evolution Sender) no está activa o no se encuentra.', 'pos-base' ) ), 501 ); // 501 Not Implemented
+        return;
+    }
+
+    // 5. Llamar a la función de envío del CRM
+    $result = crm_external_send_whatsapp_message(
+        $recipient_identifier,
+        $message_content,
+        $instance_name,
+        $media_url,
+        $media_filename
+    );
+
+    // 6. Manejar la respuesta
+    if ( is_wp_error( $result ) ) {
+        wp_send_json_error( array(
+            'message' => $result->get_error_message(),
+            'code'    => $result->get_error_code()
+        ), 400 ); // O 500 si es un error del servidor de la API de Evolution
+    } else {
+        // Asumimos que $result es la respuesta de la API de Evolution
+        wp_send_json_success( array(
+            'message' => __( 'Mensaje enviado correctamente (o en proceso).', 'pos-base' ),
+            'api_response' => $result // Opcional: devolver la respuesta de la API
+        ) );
     }
 }
 

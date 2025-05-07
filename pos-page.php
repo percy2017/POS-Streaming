@@ -285,6 +285,32 @@ function pos_base_render_page() {
                 <div id="pos-event-details-content" class="pos-modal-content">
                     <p><?php esc_html_e( 'Cargando detalles del evento...', 'pos-base' ); ?></p>
                 </div>
+                <!-- Formulario de WhatsApp Estándar (Movido FUERA de pos-event-details-content) -->
+                <div id="crm-standard-whatsapp-form" style="display: none; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee;">
+                    <h4><?php esc_html_e( 'Enviar Mensaje WhatsApp', 'pos-base' ); ?></h4>
+                    <p>
+                        <label for="crm-standard-instance-selector"><?php esc_html_e( 'Instancia:', 'pos-base' ); ?></label><br>
+                        <select id="crm-standard-instance-selector" name="crm_standard_instance_selector" style="width: 100%;"></select>
+                    </p>
+                    <p>
+                        <label for="crm-standard-recipient-phone"><?php esc_html_e( 'Teléfono Destinatario:', 'pos-base' ); ?></label><br>
+                        <input type="text" id="crm-standard-recipient-phone" name="crm_standard_recipient_phone" readonly="readonly" style="width: 100%; background-color: #f0f0f0;">
+                    </p>
+                    <p>
+                        <label for="crm-standard-message-text"><?php esc_html_e( 'Mensaje:', 'pos-base' ); ?></label><br>
+                        <textarea id="crm-standard-message-text" name="crm_standard_message_text" rows="3" style="width: 100%;"></textarea>
+                    </p>
+                    <p>
+                        <button type="button" id="crm-standard-select-media-button" class="button"><?php esc_html_e( 'Adjuntar Multimedia', 'pos-base' ); ?></button>
+                        <input type="hidden" id="crm-standard-media-url">
+                        <input type="hidden" id="crm-standard-media-filename">
+                        <span id="crm-standard-media-preview" style="margin-left: 10px;"></span>
+                    </p>
+                    <p>
+                        <button type="button" id="crm-standard-send-button" class="button button-primary"><?php esc_html_e( 'Enviar Mensaje', 'pos-base' ); ?></button>
+                    </p>
+                    <div id="crm-standard-form-feedback" style="margin-top: 10px;"></div>
+                </div>
             </div>
 
         </div> <!-- /#pos-tab-content-wrapper -->

@@ -889,3 +889,68 @@
 #pos-event-details-content p[style*="text-align:center"] {
     margin-top: 25px;
 }
+
+/* --- Estilos para el Formulario CRM de WhatsApp en el Modal --- */
+#crm-standard-whatsapp-form {
+    background-color: #f9f9f9; /* Fondo ligeramente gris para diferenciar */
+    border-top: 2px solid #0073aa; /* Borde superior más grueso y de color (azul WP) */
+    padding: 20px; /* Padding general */
+    margin-top: 25px; /* Espacio sobre el formulario */
+    border-radius: 3px; /* Bordes ligeramente redondeados */
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05); /* Sombra sutil */
+}
+
+/* Título del formulario CRM */
+#crm-standard-whatsapp-form h4 {
+    font-size: 16px; /* Ligeramente más pequeño que el título del modal */
+    color: #0073aa; /* Color azul WP para el título */
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px dashed #ccc; /* Separador sutil para el título */
+}
+
+/* Párrafos dentro del formulario CRM para espaciado */
+#crm-standard-whatsapp-form p {
+    margin-bottom: 15px;
+}
+#crm-standard-whatsapp-form p:last-of-type {
+    margin-bottom: 0; /* Quitar margen inferior del último párrafo (usualmente el de feedback o botones) */
+}
+
+/* Etiquetas dentro del formulario CRM */
+#crm-standard-whatsapp-form label {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #333;
+}
+
+/* Campos de entrada, select y textarea */
+#crm-standard-whatsapp-form select,
+#crm-standard-whatsapp-form input[type="text"],
+#crm-standard-whatsapp-form textarea {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    box-sizing: border-box;
+    background-color: #fff; /* Fondo blanco para campos */
+}
+#crm-standard-whatsapp-form input[readonly] {
+    background-color: #f0f0f0 !important; /* Asegurar que el readonly tenga fondo gris */
+}
+
+/* Botones dentro del formulario CRM */
+#crm-standard-whatsapp-form .button {
+    margin-right: 5px; /* Espacio entre botones si hay varios */
+}
+
+#crm-standard-whatsapp-form #crm-standard-form-feedback {
+    padding: 10px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+/* No es necesario redefinir .success o .error si ya existen globalmente,
+   pero si quieres un estilo específico para el feedback del CRM, puedes hacerlo aquí. */
